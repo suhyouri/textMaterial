@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Speech Word Gravity</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        overflow: hidden;
+        background: white;
+        font-family: sans-serif;
+      }
+
+      .progress-container {
+        width: 30%;
+        height: 10px;
+        background-color: white;
+        border: 1px solid black;
+        border-radius: 15px;
+        box-sizing: border-box;
+        position: fixed;
+        margin-left: 1%;
+        top: 10px;
+        left: 0;
+        z-index: 999;
+      }
+
+      .progress-bar {
+        height: 100%;
+        width: 0%;
+        background-color: black;
+        border-radius: 15px;
+        transition: width 0.3s ease;
+      }
+
+      .word {
+        position: absolute;
+        font-size: 20px;
+        font-weight: bold;
+        pointer-events: none;
+        user-select: none;
+        background-color: white;
+        border: 2px solid black;
+        box-sizing: border-box;
+        text-align: center;
+        white-space: nowrap;
+      }
+
+      .circle {
+        width: 50px;
+        height: 50px;
+        background-color: black;
+        border-radius: 50%;
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 9999;
+        cursor: pointer;
+        display: none;
+      }
+
+      canvas {
+        position: absolute;
+        top: 0;
+        left: 0;
+        pointer-events: none;
+        z-index: 1;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="progress-container">
+      <div class="progress-bar" id="progressBar"></div>
+    </div>
+
+    <div class="circle" id="circle"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/matter-js@0.19.0/build/matter.min.js"></script>
+
+    <script>
+      const SpeechRecognition =
+        window.SpeechRecognition || window.webkitSpeechRecognition;
+      const recognition = new SpeechRecognition();
+      recognition.lang = "ko-KR";
+      recognition.interimResults = false;
+      recognition.continuous = true;
+
+      let wordCount = 0;
+      const maxWords = 10;
+      const wordElements = [];
+      let gravityMode = false;
+
+      function showWord(word) {
+        const x = Math.random() * (window.innerWidth - 100);
+        const y = Math.random() * (window.innerHeight - 30) + 40;
+
+        if (!gravityMode) {
+          const span = document.createElement("span");
+          span.className = "word";
+          span.textContent = word;
+          span.style.left = `${x}px`;
+          span.style.top = `${y}px`;
+          document.body.appendChild(span);
+
+          wordElements.push({ element: span, word });
+
+          wordCount++;
+          if (wordCount <= maxWords) {
+            const progress = (wordCount / maxWords) * 100;
+            document.getElementById("progressBar").style.width = `${progress}%`;
+          }
+
+          if (wordCount === maxWords) {
+            document.getElementById("circle").style.display = "block";
+          }
+        } else {
+          const temp = document.createElement("span");
+          temp.className = "word";
+          temp.textContent = word;
+          temp.style.left = "-9999px";
+          document.body.appendChild(temp);
+
+          const width = temp.offsetWidth + 8;
+          const height = temp.offsetHeight + 4;
+          temp.remove();
+
+          const body = Bodies.rectangle(x, y, width, height, {
+            restitution: 0.4,
+            friction: 0.3,
+            density: word.length * 0.001 + 0.001,
+            render: { visible: false },
+          });
+
+          const domBox = document.createElement("div");
+          domBox.className = "word";
+          domBox.style.width = `${width}px`;
+          domBox.style.height = `${height}px`;
+          domBox.style.lineHeight = `${height}px`;
+          domBox.textContent = word;
+
+          document.body.appendChild(domBox);
+          body.domElement = domBox;
+          Composite.add(world, body);
+        }
+      }
+
+      recognition.onresult = (event) => {
+        const transcript =
+          event.results[event.results.length - 1][0].transcript;
+        const words = transcript.trim().split(/\s+/);
+        words.forEach(showWord);
+      };
+
+      recognition.onerror = (event) => {
+        console.error("Speech recognition error:", event.error);
+      };
+
+      recognition.onend = () => {
+        recognition.start();
+      };
+
+      recognition.start();
+
+      const { Engine, Render, Runner, Bodies, Composite, Events } = Matter;
+      const engine = Engine.create();
+      const world = engine.world;
+
+      const render = Render.create({
+        element: document.body,
+        engine: engine,
+        options: {
+          width: window.innerWidth,
+          height: window.innerHeight,
+          wireframes: false,
+          background: "transparent",
+        },
+      });
+
+      Render.run(render);
+      const runner = Runner.create();
+      Runner.run(runner, engine);
+
+      const ground = Bodies.rectangle(
+        window.innerWidth / 2,
+        window.innerHeight + 20,
+        window.innerWidth,
+        40,
+        { isStatic: true }
+      );
+      Composite.add(world, ground);
+
+      Events.on(engine, "afterUpdate", () => {
+        Composite.allBodies(world).forEach((body) => {
+          if (body.domElement) {
+            const { x, y } = body.position;
+            const w = body.bounds.max.x - body.bounds.min.x;
+            const h = body.bounds.max.y - body.bounds.min.y;
+            body.domElement.style.left = `${x - w / 2}px`;
+            body.domElement.style.top = `${y - h / 2}px`;
+          }
+        });
+      });
+
+      document.getElementById("circle").addEventListener("click", () => {
+        gravityMode = true;
+
+        wordElements.forEach(({ element, word }) => {
+          const rect = element.getBoundingClientRect();
+          element.remove();
+
+          const width = rect.width;
+          const height = rect.height;
+          const x = rect.left + width / 2;
+          const y = rect.top + height / 2;
+
+          const body = Bodies.rectangle(x, y, width, height, {
+            restitution: 0.7,
+            friction: 0.3,
+            frictionAir: 0.02, // 공기 마찰 (회전 감속)
+            angularDamping: 0.3, // 회전 감쇠
+            density: 0.01, // 질량 관련 (글자 수 기반이면 여기에 * 적용)
+            density: word.length * 0.001 + 0.001,
+            render: { visible: false },
+          });
+
+          const domBox = document.createElement("div");
+          domBox.className = "word";
+          domBox.style.width = `${width}px`;
+          domBox.style.height = `${height}px`;
+          domBox.style.lineHeight = `${height}px`;
+          domBox.textContent = word;
+
+          document.body.appendChild(domBox);
+          body.domElement = domBox;
+
+          Composite.add(world, body);
+        });
+
+        document.getElementById("circle").remove();
+      });
+    </script>
+  </body>
+</html>
