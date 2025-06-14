@@ -2,48 +2,67 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <title>Speech Word Gravity</title>
+    <title>텍스트의 무게를 감각하기</title>
     <style>
       html,
       body {
+        display: flex;
+        justify-content: center;
+        align-items: center;
         margin: 0;
         padding: 0;
         height: 100%;
         overflow: hidden;
         background: white;
-        font-family: sans-serif;
+        font-family: "Noto Sans KR", sans-serif;
+        font-size: 20px;
       }
 
       .progress-container {
-        width: 30%;
-        height: 10px;
+        width: 10px; /* 세로 바이기 때문에 폭은 좁게 */
+        height: 80vh; /* 전체 높이의 30% 정도, 필요시 조절 가능 */
         background-color: white;
         border: 1px solid black;
         border-radius: 15px;
         box-sizing: border-box;
         position: fixed;
-        margin-left: 1%;
-        top: 10px;
-        left: 0;
-        z-index: 999;
+        bottom: 2%;
+        left: 1%;
+        z-index: -1;
+        display: flex;
+        align-items: flex-end; /* bar가 아래에서부터 위로 자라도록 */
       }
 
       .progress-bar {
-        height: 100%;
-        width: 0%;
+        width: 100%;
+        height: 0%; /* 시작은 0% */
         background-color: black;
         border-radius: 15px;
-        transition: width 0.3s ease;
+        transition: height 0.3s ease;
+      }
+
+      .title {
+        position: fixed;
+        top: 10px;
+        left: 0;
+        margin-left: 1%;
+        font-weight: 500;
+        text-align: left;
+      }
+
+      a {
+        text-decoration: none; /* 밑줄 제거 */
+        color: inherit; /* 텍스트 색상을 부모 요소로부터 상속 */
       }
 
       .word {
         position: absolute;
-        font-size: 20px;
-        font-weight: bold;
+        font-size: 1rem;
+        font-weight: 500;
         pointer-events: none;
         user-select: none;
-        background-color: white;
-        border: 2px solid black;
+        /* background-color: white; */
+        /* border: 2px solid black; */
         box-sizing: border-box;
         text-align: center;
         white-space: nowrap;
@@ -70,14 +89,89 @@
         pointer-events: none;
         z-index: 1;
       }
+
+      .mobile-warning {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: yellow;
+        color: black;
+        font-family: "Noto Sans KR", sans-serif;
+        font-size: 5vw;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        text-align: center;
+        z-index: 99999;
+        padding: 10%;
+        box-sizing: border-box;
+        line-height: 150%;
+      }
+
+      .score {
+        position: fixed;
+        top: 10px;
+        right: 0;
+        margin-right: 1%;
+        font-weight: 500;
+        text-align: right;
+      }
+
+      .consonant {
+        /* border: 1px solid black; */
+        display: inline-block;
+        width: 1rem;
+        margin-left: 0.1rem; /* ← 문장과의 간격 조절 */
+        text-align: center;
+      }
+
+      .consonantButton {
+        margin-top: 0.5rem;
+        width: 30%;
+        font-size: 0.9rem;
+        color: black;
+        display: block; /* 한 줄 차지 */
+        padding: 0.3rem 0.8rem;
+        background-color: white;
+        transition: background-color 0.2s ease;
+        text-align: center; /* 내부 텍스트 중앙 정렬 */
+        cursor: pointer;
+        border: 1px solid black;
+        border-radius: 8px;
+        margin-left: auto; /* 우측 정렬 */
+      }
+
+      .consonantButton:hover {
+        background-color: #f0f0f0;
+      }
     </style>
   </head>
   <body>
+    <div class="title">
+      텍스트의 무게를 감각하기<br /><a
+        href="https://www.instagram.com/suhyouri"
+        target="_blank"
+        rel="noopener noreferrer"
+        >서유리</a
+      >
+    </div>
     <div class="progress-container">
       <div class="progress-bar" id="progressBar"></div>
     </div>
 
     <div class="circle" id="circle"></div>
+    <div id="mobileWarning" class="mobile-warning" style="display: none">
+      본 프로젝트는 <br />데스크탑 환경에 최적화되어 있습니다.<br />
+      데스크탑으로 접속해주세요.
+    </div>
+
+    <div class="score">
+      다음의 자음으로 시작하는 문장을 말하세요 :
+      <div class="consonant">ㄱ</div>
+      <div class="consonantButton">다음 자음 ⇢</div>
+    </div>
 
     <script src="https://cdn.jsdelivr.net/npm/matter-js@0.19.0/build/matter.min.js"></script>
 
@@ -93,6 +187,24 @@
       const maxWords = 10;
       const wordElements = [];
       let gravityMode = false;
+      let consonants = "ㄴㄷㄹㅁㅂㅅㅇㅈㅊㅋㅍㅌㅎ";
+      let consonantIndex = -1;
+
+      document
+        .querySelector(".consonantButton")
+        .addEventListener("click", () => {
+          consonantIndex++;
+
+          if (consonantIndex >= consonants.length) {
+            // 자음 끝났으면 요소 숨기기
+            document.querySelector(".consonant").style.display = "none";
+            document.querySelector(".consonantButton").style.display = "none";
+            document.querySelector(".score").style.display = "none";
+          } else {
+            document.querySelector(".consonant").textContent =
+              consonants[consonantIndex];
+          }
+        });
 
       function showWord(word) {
         const x = Math.random() * (window.innerWidth - 100);
@@ -111,7 +223,9 @@
           wordCount++;
           if (wordCount <= maxWords) {
             const progress = (wordCount / maxWords) * 100;
-            document.getElementById("progressBar").style.width = `${progress}%`;
+            document.getElementById(
+              "progressBar"
+            ).style.height = `${progress}%`;
           }
 
           if (wordCount === maxWords) {
@@ -242,6 +356,12 @@
 
         document.getElementById("circle").remove();
       });
+
+      // 모바일 환경 감지 및 경고 표시
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      if (isMobile) {
+        document.getElementById("mobileWarning").style.display = "flex";
+      }
     </script>
   </body>
 </html>
