@@ -28,7 +28,7 @@
         position: fixed;
         bottom: 2%;
         left: 1%;
-        z-index: -1;
+        z-index: 1;
         display: flex;
         align-items: flex-end; /* bar가 아래에서부터 위로 자라도록 */
       }
@@ -66,6 +66,9 @@
         box-sizing: border-box;
         text-align: center;
         white-space: nowrap;
+        z-index: 10;
+        text-shadow: -1px -1px 0 white, 1px -1px 0 white, -1px 1px 0 white,
+          1px 1px 0 white;
       }
 
       .circle {
@@ -80,6 +83,9 @@
         z-index: 9999;
         cursor: pointer;
         display: none;
+        color: white;
+        justify-content: center; /* ✅ 중앙 정렬 (가로) */
+        align-items: center;
       }
 
       canvas {
@@ -146,6 +152,42 @@
       .consonantButton:hover {
         background-color: #f0f0f0;
       }
+
+      /* .draggable-word {
+        position: fixed;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        font-size: 1rem;
+        font-weight: 500;
+        color: black;
+        background-color: white;
+        cursor: grab;
+        user-select: none;
+        z-index: 99999;
+      } */
+
+      @keyframes shake {
+        0% {
+          transform: translate(-50%, -50%) rotate(0deg);
+        }
+        25% {
+          transform: translate(-49%, -49%) rotate(1deg);
+        }
+        50% {
+          transform: translate(-50%, -50%) rotate(0deg);
+        }
+        75% {
+          transform: translate(-51%, -51%) rotate(-1deg);
+        }
+        100% {
+          transform: translate(-50%, -50%) rotate(0deg);
+        }
+      }
+
+      .shake-on-drag {
+        animation: shake 0.15s infinite;
+      }
     </style>
   </head>
   <body>
@@ -161,7 +203,7 @@
       <div class="progress-bar" id="progressBar"></div>
     </div>
 
-    <div class="circle" id="circle"></div>
+    <div class="circle" id="circle">↓</div>
     <div id="mobileWarning" class="mobile-warning" style="display: none">
       본 프로젝트는 <br />데스크탑 환경에 최적화되어 있습니다.<br />
       데스크탑으로 접속해주세요.
@@ -172,6 +214,7 @@
       <div class="consonant">ㄱ</div>
       <div class="consonantButton">다음 자음 ⇢</div>
     </div>
+    <!-- <div class="draggable-word">스</div> -->
 
     <script src="https://cdn.jsdelivr.net/npm/matter-js@0.19.0/build/matter.min.js"></script>
 
@@ -184,11 +227,32 @@
       recognition.continuous = true;
 
       let wordCount = 0;
-      const maxWords = 10;
+      const maxWords = 5;
       const wordElements = [];
+
+      let draggableDiv = null;
       let gravityMode = false;
       let consonants = "ㄴㄷㄹㅁㅂㅅㅇㅈㅊㅋㅍㅌㅎ";
       let consonantIndex = -1;
+
+      let isDragging = false;
+      let offsetX = 0;
+      let offsetY = 0;
+
+      document.addEventListener("mousemove", (e) => {
+        if (isDragging) {
+          draggableDiv.style.left = `${e.clientX - offsetX}px`;
+          draggableDiv.style.top = `${e.clientY - offsetY}px`;
+        }
+      });
+
+      document.addEventListener("mouseup", () => {
+        isDragging = false;
+        if (draggableDiv) {
+          draggableDiv.style.cursor = "grab";
+          draggableDiv.classList.remove("shake-on-drag");
+        }
+      });
 
       document
         .querySelector(".consonantButton")
@@ -230,6 +294,7 @@
 
           if (wordCount === maxWords) {
             document.getElementById("circle").style.display = "block";
+            circle.style.display = "flex";
           }
         } else {
           const temp = document.createElement("span");
@@ -242,11 +307,12 @@
           const height = temp.offsetHeight + 4;
           temp.remove();
 
+          //boxxxxxxxxxxx
           const body = Bodies.rectangle(x, y, width, height, {
             restitution: 0.4,
             friction: 0.3,
             density: word.length * 0.001 + 0.001,
-            render: { visible: false },
+            render: { visible: true },
           });
 
           const domBox = document.createElement("div");
@@ -274,7 +340,9 @@
       };
 
       recognition.onend = () => {
-        recognition.start();
+        if (!gravityMode) {
+          recognition.start();
+        }
       };
 
       recognition.start();
@@ -306,6 +374,27 @@
         { isStatic: true }
       );
       Composite.add(world, ground);
+      // 추가
+
+      const thickness = 40; // 벽 두께
+
+      const leftWall = Bodies.rectangle(
+        -thickness / 2, // x 위치: 왼쪽 바깥
+        window.innerHeight / 2, // y 위치: 화면 중앙
+        thickness, // 폭
+        window.innerHeight, // 높이
+        { isStatic: true }
+      );
+
+      const rightWall = Bodies.rectangle(
+        window.innerWidth + thickness / 2, // x 위치: 오른쪽 바깥
+        window.innerHeight / 2,
+        thickness,
+        window.innerHeight,
+        { isStatic: true }
+      );
+
+      Composite.add(world, [leftWall, rightWall]);
 
       Events.on(engine, "afterUpdate", () => {
         Composite.allBodies(world).forEach((body) => {
@@ -320,7 +409,13 @@
       });
 
       document.getElementById("circle").addEventListener("click", () => {
+        // ✅ 음성인식 정지
+        recognition.stop();
+
         gravityMode = true;
+        document.querySelector(".score").style.display = "none";
+        document.querySelector(".progress-container").style.display = "none";
+        document.querySelector(".progress-bar").style.display = "none";
 
         wordElements.forEach(({ element, word }) => {
           const rect = element.getBoundingClientRect();
@@ -332,11 +427,10 @@
           const y = rect.top + height / 2;
 
           const body = Bodies.rectangle(x, y, width, height, {
-            restitution: 0.7,
-            friction: 0.3,
-            frictionAir: 0.02, // 공기 마찰 (회전 감속)
+            restitution: 0.2,
+            friction: 0.1,
+            frictionAir: 0.01, // 공기 마찰 (회전 감속)
             angularDamping: 0.3, // 회전 감쇠
-            density: 0.01, // 질량 관련 (글자 수 기반이면 여기에 * 적용)
             density: word.length * 0.001 + 0.001,
             render: { visible: false },
           });
@@ -355,6 +449,28 @@
         });
 
         document.getElementById("circle").remove();
+
+        // ✅ 여기서 생성
+        draggableDiv = document.createElement("div");
+        draggableDiv.textContent = "스";
+        draggableDiv.style.position = "fixed";
+        draggableDiv.style.left = "50%";
+        draggableDiv.style.top = "50%";
+        draggableDiv.style.transform = "translate(-50%, -50%)";
+        draggableDiv.style.fontSize = "1rem";
+        draggableDiv.style.cursor = "grab";
+        draggableDiv.style.userSelect = "none";
+        draggableDiv.style.zIndex = "99999";
+        document.body.appendChild(draggableDiv);
+
+        // ✅ 이벤트 연결
+        draggableDiv.addEventListener("mousedown", (e) => {
+          isDragging = true;
+          offsetX = e.clientX - draggableDiv.getBoundingClientRect().left;
+          offsetY = e.clientY - draggableDiv.getBoundingClientRect().top;
+          draggableDiv.style.cursor = "grabbing";
+          draggableDiv.classList.add("shake-on-drag"); // 흔들림 효과 ON
+        });
       });
 
       // 모바일 환경 감지 및 경고 표시

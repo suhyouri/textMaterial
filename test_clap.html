@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Clap Detector</title>
+    <style>
+      body {
+        margin: 0;
+        height: 100vh;
+        overflow: hidden;
+        position: relative;
+        background: #fff;
+      }
+
+      .emoji {
+        position: absolute;
+        font-size: 2rem;
+        pointer-events: none;
+        animation: pop 1s ease-out forwards;
+      }
+
+      @keyframes pop {
+        0% {
+          transform: scale(0.5);
+          opacity: 0;
+        }
+        50% {
+          transform: scale(1.2);
+          opacity: 1;
+        }
+        100% {
+          transform: scale(1);
+          opacity: 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <script>
+      async function startClapDetector() {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: true,
+        });
+        const audioCtx = new (window.AudioContext ||
+          window.webkitAudioContext)();
+        const mic = audioCtx.createMediaStreamSource(stream);
+        const analyser = audioCtx.createAnalyser();
+        const dataArray = new Uint8Array(analyser.fftSize);
+
+        mic.connect(analyser);
+
+        function detectClap() {
+          analyser.getByteTimeDomainData(dataArray);
+
+          let maxVolume = 0;
+          for (let i = 0; i < dataArray.length; i++) {
+            const v = Math.abs(dataArray[i] - 128);
+            if (v > maxVolume) maxVolume = v;
+          }
+
+          if (maxVolume > 60) {
+            createClapEmoji();
+          }
+
+          requestAnimationFrame(detectClap);
+        }
+
+        function createClapEmoji() {
+          const emoji = document.createElement("div");
+          emoji.className = "emoji";
+          emoji.textContent = "👏";
+
+          const x = Math.random() * (window.innerWidth - 50);
+          const y = Math.random() * (window.innerHeight - 50);
+
+          emoji.style.left = `${x}px`;
+          emoji.style.top = `${y}px`;
+
+          document.body.appendChild(emoji);
+
+          setTimeout(() => {
+            emoji.remove();
+          }, 1000); // remove after animation
+        }
+
+        detectClap();
+      }
+
+      startClapDetector();
+    </script>
+  </body>
+</html>
