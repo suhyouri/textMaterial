@@ -220,6 +220,26 @@
           opacity: 0;
         }
       }
+
+      #instructionDiv {
+        /* id로 직접 선택 */
+        position: fixed;
+        left: 50%;
+        top: 50%;
+        width: 80%;
+        transform: translate(-50%, -50%);
+        font-size: 1rem;
+        font-weight: 500;
+        color: black;
+        user-select: none;
+        z-index: 99999;
+        text-align: center;
+        display: none; /* Hide initially */
+
+        /* 💡 이 두 줄을 추가하여 부드러운 사라짐 효과를 만듭니다 */
+        opacity: 1; /* 기본 투명도 100% */
+        transition: opacity 2s ease-out; /* 2초에 걸쳐 부드럽게 사라지도록 설정 */
+      }
     </style>
   </head>
   <body>
@@ -709,10 +729,21 @@
         isErasingMode = true;
         recognition.start();
 
-        document.getElementById("instructionDiv").textContent =
-          "지정된 순서대로 단어를 말하여 지우세요.";
+        // 💡 지시문 텍스트 설정 및 표시
+        const instructionDiv = document.getElementById("instructionDiv");
+        instructionDiv.textContent = "순서대로 단어를 말하여 지우세요.";
+        instructionDiv.style.display = "block"; // 다시 표시
+        instructionDiv.style.opacity = "1"; // 투명도를 100%로 설정 (사라진 후 다시 나타날 때 대비)
 
-        // 💡 시도 횟수 초기화
+        // 💡 10초 후에 지시문 천천히 사라지게 하기
+        setTimeout(() => {
+          instructionDiv.style.opacity = "0"; // 투명도를 0으로 만들어 사라지기 시작
+          // opacity 트랜지션이 끝난 후 완전히 숨김 (약 2초 + 여유 시간)
+          setTimeout(() => {
+            instructionDiv.style.display = "none";
+          }, 2000); // CSS transition 시간(2초)보다 약간 길게 설정
+        }, 10000); // 10초 후에 opacity 변경 시작
+
         currentWordAttemptCount = 0;
 
         if (matterBodies.length > 0) {
@@ -812,7 +843,13 @@
         }
 
         // 다음 단어로 인덱스 이동
-        currentWordIndexToErase++;
+        currentWordIndexToEerase++;
+
+        // 💡 첫 번째 단어가 지워지면 지시문 숨기기
+        if (currentWordIndexToErase === 1) {
+          // 첫 번째 단어 제거 후 currentWordIndexToErase는 1이 됩니다.
+          document.getElementById("instructionDiv").style.display = "none";
+        }
 
         // 다음 단어 강조 또는 모든 단어 지움 처리
         if (currentWordIndexToErase < matterBodies.length) {
@@ -824,12 +861,27 @@
         } else {
           // 모든 단어를 지웠을 때
           document.getElementById("instructionDiv").textContent =
-            "수고하셨습니다!👏👏";
+            "모든 단어를 지웠습니다!";
+          document.getElementById("instructionDiv").style.display = "block"; // 최종 메시지는 다시 표시
           recognition.stop();
           document.querySelector(".next").classList.remove("animate-blink");
           document.querySelector(".next").style.display = "none";
 
           // 💡 박수 감지기 시작!
+          startClapDetector();
+        }
+
+        // 모든 단어를 지웠을 때
+        if (currentWordIndexToErase >= matterBodies.length) {
+          // 모든 단어가 지워진 최종 조건
+          const instructionDiv = document.getElementById("instructionDiv");
+          instructionDiv.textContent = "모든 단어를 지웠습니다!";
+          instructionDiv.style.display = "block"; // 최종 메시지는 다시 표시
+          instructionDiv.style.opacity = "1"; // 완전히 보이게
+          recognition.stop();
+          document.querySelector(".next").classList.remove("animate-blink");
+          document.querySelector(".next").style.display = "none";
+
           startClapDetector();
         }
       }
