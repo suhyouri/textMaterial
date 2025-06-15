@@ -194,6 +194,30 @@
       .next.animate-blink {
         animation: blink 1s infinite alternate; /* 1초 동안 무한히 깜빡임 (나타났다 사라졌다 반복) */
       }
+
+      /* 💡 박수 이모티콘 CSS */
+      .emoji {
+        position: absolute;
+        font-size: 2rem; /* 이모티콘 크기 */
+        pointer-events: none; /* 마우스 이벤트 무시 */
+        animation: pop 1s ease-out forwards; /* 팝 애니메이션 적용 */
+      }
+
+      /* 💡 팝 애니메이션 키프레임 */
+      @keyframes pop {
+        0% {
+          transform: scale(0.5);
+          opacity: 0;
+        }
+        50% {
+          transform: scale(1.2);
+          opacity: 1;
+        }
+        100% {
+          transform: scale(1);
+          opacity: 0;
+        }
+      }
     </style>
   </head>
   <body>
@@ -420,13 +444,11 @@
             const targetWordItem = matterBodies[currentWordIndexToErase];
             const targetWord = targetWordItem.word;
 
-            // 인식된 문구가 지워야 할 단어를 포함하는지 확인 (대소문자 무시를 위해 toLowerCase() 사용 가능)
             if (recognizedPhrase.includes(targetWord)) {
               console.log(`'${targetWord}' 단어를 인식했습니다. 제거합니다.`);
               Matter.Composite.remove(world, targetWordItem.body);
               targetWordItem.domElement.remove();
 
-              // 이전 단어 강조 해제 (만약 이전 단어가 존재한다면)
               if (currentWordIndexToErase > 0) {
                 matterBodies[
                   currentWordIndexToErase - 1
@@ -436,10 +458,8 @@
                 ].domElement.style.fontWeight = "normal";
               }
 
-              // 다음 단어로 인덱스 이동
               currentWordIndexToErase++;
 
-              // 💡 다음 단어 강조 (선택 사항)
               if (currentWordIndexToErase < matterBodies.length) {
                 matterBodies[
                   currentWordIndexToErase
@@ -451,11 +471,14 @@
                 // 모든 단어를 지웠을 때
                 document.getElementById("instructionDiv").textContent =
                   "모든 단어를 지웠습니다!";
-                recognition.stop();
+                recognition.stop(); // 💡 음성 인식 중지
                 document
                   .querySelector(".next")
                   .classList.remove("animate-blink");
-                document.querySelector(".next").style.display = "none";
+                document.querySelector(".next").style.display = "none"; // 또는 원하는 다른 최종 시각적 액션
+
+                // 💡 박수 감지기 시작!
+                startClapDetector();
               }
             } else {
               console.log(
@@ -676,6 +699,77 @@
           ].domElement.style.textDecoration = "underline";
           matterBodies[currentWordIndexToErase].domElement.style.fontWeight =
             "bold";
+        }
+      }
+
+      // 💡 박수 인식 시작 함수
+      async function startClapDetector() {
+        // 모바일 환경 경고 표시 중이면 박수 감지기 시작 안 함
+        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        if (isMobile) {
+          console.log("모바일 환경이므로 박수 감지기를 시작하지 않습니다.");
+          return; // 모바일이면 함수 실행 중단
+        }
+
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({
+            audio: true,
+          });
+          const audioCtx = new (window.AudioContext ||
+            window.webkitAudioContext)();
+          const mic = audioCtx.createMediaStreamSource(stream);
+          const analyser = audioCtx.createAnalyser();
+          const dataArray = new Uint8Array(analyser.fftSize);
+
+          mic.connect(analyser);
+
+          // 볼륨 임계값 (조절 가능): 박수를 감지하는 민감도
+          const CLAP_THRESHOLD = 60;
+
+          function detectClap() {
+            analyser.getByteTimeDomainData(dataArray);
+
+            let maxVolume = 0;
+            for (let i = 0; i < dataArray.length; i++) {
+              const v = Math.abs(dataArray[i] - 128);
+              if (v > maxVolume) maxVolume = v;
+            }
+
+            // console.log("Current max volume:", maxVolume); // 디버깅용: 현재 볼륨 확인
+
+            if (maxVolume > CLAP_THRESHOLD) {
+              console.log("박수 감지! 👏");
+              createClapEmoji();
+            }
+
+            requestAnimationFrame(detectClap);
+          }
+
+          function createClapEmoji() {
+            const emoji = document.createElement("div");
+            emoji.className = "emoji";
+            emoji.textContent = "👏";
+
+            const x = Math.random() * (window.innerWidth - 50);
+            const y = Math.random() * (window.innerHeight - 50);
+
+            emoji.style.left = `${x}px`;
+            emoji.style.top = `${y}px`;
+
+            document.body.appendChild(emoji);
+
+            setTimeout(() => {
+              emoji.remove();
+            }, 1000); // 애니메이션 후 제거
+          }
+
+          detectClap();
+          console.log("박수 감지기 시작됨.");
+        } catch (err) {
+          console.error("오디오 스트림에 접근할 수 없습니다:", err);
+          alert(
+            "마이크 접근 권한이 필요합니다. 페이지를 새로고침하여 권한을 허용해주세요."
+          );
         }
       }
     </script>
