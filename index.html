@@ -48,6 +48,8 @@
         margin-left: 1%;
         font-weight: 500;
         text-align: left;
+        /* background-color: white; */
+        z-index: 999;
       }
 
       a {
@@ -302,6 +304,10 @@
       let isErasingMode = false; // 단어 지우기 모드인지 여부
       let currentWordIndexToErase = 0; // 지워야 할 단어의 현재 인덱스
 
+      // 💡 새로 추가할 변수:
+      const MAX_ATTEMPTS = 3; // 최대 시도 횟수
+      let currentWordAttemptCount = 0; // 현재 단어에 대한 시도 횟수
+
       // 💡 이 부분을 기존의 mousemove 이벤트 리스너와 교체하세요
       document.addEventListener("mousemove", (e) => {
         if (isDraggingWord && currentDraggedElement && currentDraggedBody) {
@@ -432,11 +438,13 @@
       recognition.onresult = (event) => {
         const transcript =
           event.results[event.results.length - 1][0].transcript;
-        const words = transcript.trim().split(/\s+/);
+        // const words = transcript.trim().split(/\s+/); // 이 변수는 현재 사용되지 않습니다.
 
         if (!isErasingMode) {
-          words.forEach(showWord);
+          // 기존 단어 생성 로직
+          transcript.trim().split(/\s+/).forEach(showWord);
         } else {
+          // 단어 지우기 모드
           const recognizedPhrase = transcript.trim();
           console.log("인식된 문구 (지우기 모드):", recognizedPhrase);
 
@@ -444,46 +452,29 @@
             const targetWordItem = matterBodies[currentWordIndexToErase];
             const targetWord = targetWordItem.word;
 
+            // 인식된 문구가 지워야 할 단어를 포함하는지 확인
             if (recognizedPhrase.includes(targetWord)) {
               console.log(`'${targetWord}' 단어를 인식했습니다. 제거합니다.`);
-              Matter.Composite.remove(world, targetWordItem.body);
-              targetWordItem.domElement.remove();
-
-              if (currentWordIndexToErase > 0) {
-                matterBodies[
-                  currentWordIndexToErase - 1
-                ].domElement.style.textDecoration = "none";
-                matterBodies[
-                  currentWordIndexToErase - 1
-                ].domElement.style.fontWeight = "normal";
-              }
-
-              currentWordIndexToErase++;
-
-              if (currentWordIndexToErase < matterBodies.length) {
-                matterBodies[
-                  currentWordIndexToErase
-                ].domElement.style.textDecoration = "underline";
-                matterBodies[
-                  currentWordIndexToErase
-                ].domElement.style.fontWeight = "bold";
-              } else {
-                // 모든 단어를 지웠을 때
-                document.getElementById("instructionDiv").textContent =
-                  "모든 단어를 지웠습니다!";
-                recognition.stop(); // 💡 음성 인식 중지
-                document
-                  .querySelector(".next")
-                  .classList.remove("animate-blink");
-                document.querySelector(".next").style.display = "none"; // 또는 원하는 다른 최종 시각적 액션
-
-                // 💡 박수 감지기 시작!
-                startClapDetector();
-              }
+              // 단어 제거 및 다음 단어로 이동
+              removeCurrentWordAndAdvance();
+              // 💡 성공했으므로 시도 횟수 초기화
+              currentWordAttemptCount = 0;
             } else {
+              // 💡 인식 실패 시 시도 횟수 증가
+              currentWordAttemptCount++;
               console.log(
-                `'${targetWord}'(을)를 찾지 못했습니다. 다시 시도하세요.`
+                `'${targetWord}'(을)를 찾지 못했습니다. 다시 시도하세요. (시도 ${currentWordAttemptCount}/${MAX_ATTEMPTS})`
               );
+
+              if (currentWordAttemptCount >= MAX_ATTEMPTS) {
+                console.log(
+                  `3번 시도 실패. '${targetWord}' 단어를 자동으로 제거합니다.`
+                );
+                // 💡 시도 횟수 초과 시 강제 제거 및 다음 단어로 이동
+                removeCurrentWordAndAdvance();
+                // 💡 강제 제거 후에도 시도 횟수 초기화
+                currentWordAttemptCount = 0;
+              }
             }
           }
         }
@@ -552,26 +543,59 @@
       Composite.add(world, [leftWall, rightWall]);
 
       Events.on(engine, "afterUpdate", () => {
-        matterBodies.forEach(({ body, domElement }) => {
+        // 💡 역순으로 순회하여 배열에서 요소를 안전하게 제거합니다.
+        for (let i = matterBodies.length - 1; i >= 0; i--) {
+          const { body, domElement } = matterBodies[i];
           const { x, y } = body.position;
           const angle = body.angle;
-          const w = body.bounds.max.x - body.bounds.min.x;
-          const h = body.bounds.max.y - body.bounds.min.y;
 
-          // DOM 요소의 위치 (left, top)는 Matter.js 바디 위치에 따라 항상 업데이트
-          domElement.style.left = `${x - w / 2}px`;
-          domElement.style.top = `${y - h / 2}px`;
+          // DOM 요소의 left, top을 Matter.js 바디의 중심 위치에 맞춥니다.
+          // CSS에 transform: translate(-50%, -50%)가 있으므로,
+          // domElement의 (x, y)가 곧 바디의 중심이 됩니다.
+          domElement.style.left = `${x}px`;
+          domElement.style.top = `${y}px`;
 
-          // 💡 수정: 'shake-on-drag' 클래스가 없으면 Matter.js의 회전값을 적용
-          // 이 클래스가 있다면 CSS 애니메이션이 transform을 제어하게 됩니다.
+          // 'shake-on-drag' 클래스가 없으면 Matter.js의 회전값을 적용합니다.
+          // 이 클래스가 있다면 CSS 애니메이션이 transform의 rotate 부분을 제어합니다.
           if (!domElement.classList.contains("shake-on-drag")) {
-            domElement.style.transform = `rotate(${angle}rad)`;
+            domElement.style.transform = `translate(-50%, -50%) rotate(${angle}rad)`;
           }
-          // 만약 shake-on-drag 클래스가 있다면, 해당 클래스의 @keyframes shake가 transform을 제어합니다.
-          // translate(-50%, -50%) 부분은 word CSS에 고정되어야 할 수도 있습니다.
-          // 하지만 현재 애니메이션은 translate(-50%, -50%)도 포함하므로,
-          // CSS에서 .word에 transform: translate(-50%, -50%);를 기본으로 두지 않는 한 괜찮습니다.
-        });
+
+          // 💡 스크린 밖으로 벗어난 요소 제거 로직
+          // 바디의 하단 경계가 화면 아래로 완전히 벗어나거나,
+          // 좌우 경계가 화면 밖으로 완전히 벗어났을 때
+          const buffer = 50; // 화면 경계 밖으로 얼마만큼 더 나가야 지울지 여유값 (px)
+
+          if (
+            gravityMode &&
+            (body.bounds.min.y > window.innerHeight + buffer || // 화면 아래로 벗어남
+              body.bounds.max.x < -buffer || // 화면 왼쪽으로 벗어남
+              body.bounds.min.x > window.innerWidth + buffer)
+          ) {
+            // 화면 오른쪽으로 벗어남
+
+            console.log(
+              `'${matterBodies[i].word}' 단어가 화면 밖으로 벗어나 제거됩니다.`
+            );
+
+            // Matter.js 월드에서 바디 제거
+            Matter.Composite.remove(world, body);
+            // DOM에서 요소 제거
+            domElement.remove();
+
+            // matterBodies 배열에서 해당 요소 제거
+            matterBodies.splice(i, 1);
+
+            // 💡 중요: 드래그된 단어 수(draggedWordCount)는 이 로직에서 줄이지 않습니다.
+            // 이 로직은 화면 밖으로 나간 것을 지우는 것이고,
+            // draggedWordCount는 "한 번 이상 드래그되었는지" 여부를 추적하기 위함입니다.
+            // 따라서, matterBodies.length가 변경되므로,
+            // 모든 단어가 드래그되었는지 확인하는 조건 (draggedWordCount === matterBodies.length)은
+            // 이제 '모든 살아남은 단어'가 드래그되었는지로 해석될 수 있습니다.
+            // 만약 '원래 생성된 모든 단어'가 드래그되어야 한다면, totalInitialWords 같은 변수가 필요할 수 있습니다.
+            // 현재 로직에서는 '현재 남아있는 단어들' 중에서 드래그된 수를 셉니다.
+          }
+        }
       });
 
       document.getElementById("circle").addEventListener("click", () => {
@@ -668,7 +692,6 @@
         document.getElementById("mobileWarning").style.display = "flex";
       }
 
-      // 💡 새로 추가할 함수: 모든 단어의 fillStyle 제거 및 텍스트 표시
       function revealAllWords() {
         matterBodies.forEach(({ body, domElement }) => {
           if (body.render) {
@@ -676,7 +699,6 @@
           }
           domElement.style.color = "black";
           domElement.style.backgroundColor = "transparent";
-          // 💡 단어 드래그 불가능하게 만듭니다 (새로운 모드이므로).
           domElement.classList.remove("draggable");
           domElement.style.pointerEvents = "none";
           domElement.style.cursor = "default";
@@ -684,21 +706,18 @@
 
         document.querySelector(".next").classList.add("animate-blink");
 
-        // 💡 단어 지우기 모드 활성화 및 음성 인식 재시작
         isErasingMode = true;
-        recognition.start(); // 음성 인식 재시작
+        recognition.start();
 
-        // 💡 지시문 업데이트
         document.getElementById("instructionDiv").textContent =
           "지정된 순서대로 단어를 말하여 지우세요.";
 
-        // 💡 첫 번째 단어 강조 (정렬된 후의 첫 번째 단어)
+        // 💡 시도 횟수 초기화
+        currentWordAttemptCount = 0;
+
         if (matterBodies.length > 0) {
-          matterBodies[
-            currentWordIndexToErase
-          ].domElement.style.textDecoration = "underline";
-          matterBodies[currentWordIndexToErase].domElement.style.fontWeight =
-            "bold";
+          matterBodies[0].domElement.style.textDecoration = "underline";
+          matterBodies[0].domElement.style.fontWeight = "bold";
         }
       }
 
@@ -770,6 +789,48 @@
           alert(
             "마이크 접근 권한이 필요합니다. 페이지를 새로고침하여 권한을 허용해주세요."
           );
+        }
+      }
+
+      // 💡 새로 추가할 함수: 현재 단어를 제거하고 다음 단어로 진행
+      function removeCurrentWordAndAdvance() {
+        const targetWordItem = matterBodies[currentWordIndexToErase];
+
+        // Matter.js 바디 제거
+        Matter.Composite.remove(world, targetWordItem.body);
+        // DOM 요소 제거
+        targetWordItem.domElement.remove();
+
+        // 이전 단어 강조 해제 (만약 이전 단어가 존재한다면)
+        if (currentWordIndexToErase > 0) {
+          matterBodies[
+            currentWordIndexToErase - 1
+          ].domElement.style.textDecoration = "none";
+          matterBodies[
+            currentWordIndexToErase - 1
+          ].domElement.style.fontWeight = "normal";
+        }
+
+        // 다음 단어로 인덱스 이동
+        currentWordIndexToErase++;
+
+        // 다음 단어 강조 또는 모든 단어 지움 처리
+        if (currentWordIndexToErase < matterBodies.length) {
+          matterBodies[
+            currentWordIndexToErase
+          ].domElement.style.textDecoration = "underline";
+          matterBodies[currentWordIndexToErase].domElement.style.fontWeight =
+            "bold";
+        } else {
+          // 모든 단어를 지웠을 때
+          document.getElementById("instructionDiv").textContent =
+            "수고하셨습니다!👏👏";
+          recognition.stop();
+          document.querySelector(".next").classList.remove("animate-blink");
+          document.querySelector(".next").style.display = "none";
+
+          // 💡 박수 감지기 시작!
+          startClapDetector();
         }
       }
     </script>
