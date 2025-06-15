@@ -2,7 +2,7 @@
 <html lang="ko">
   <head>
     <meta charset="UTF-8" />
-    <title>팝콘처럼 호!</title>
+    <title>드래그 가능한 텍스트</title>
     <style>
       html,
       body {
@@ -10,8 +10,7 @@
         padding: 0;
         overflow: hidden;
         height: 100%;
-        background: white;
-        font-size: 18pt;
+        background: #fff;
       }
 
       canvas {
@@ -23,28 +22,49 @@
 
       .letter {
         position: absolute;
-        font-size: 80px;
+        font-size: 60px;
         font-weight: bold;
-        pointer-events: none;
-        user-select: none;
+        color: black;
         transform: translate(-50%, -50%);
+        user-select: none;
+        pointer-events: none;
         z-index: 10;
+      }
+
+      .fixed {
+        position: fixed !important;
+        z-index: 20;
+        pointer-events: auto;
+        cursor: grab;
+      }
+
+      .fixed:active {
+        cursor: grabbing;
       }
     </style>
   </head>
   <body>
     <script src="https://cdn.jsdelivr.net/npm/matter-js@0.19.0/build/matter.min.js"></script>
     <script>
-      const {
-        Engine,
-        Render,
-        Runner,
-        Bodies,
-        Composite,
-        Events,
-        Mouse,
-        MouseConstraint,
-      } = Matter;
+      const SpeechRecognition =
+        window.SpeechRecognition || window.webkitSpeechRecognition;
+      const recognition = new SpeechRecognition();
+      recognition.lang = "ko-KR";
+      recognition.continuous = true;
+      recognition.interimResults = false;
+
+      recognition.onresult = (event) => {
+        const transcript =
+          event.results[event.resultIndex][0].transcript.trim();
+        console.log("👄 인식됨:", transcript);
+        checkAndRemoveMatchingDiv(transcript);
+      };
+
+      recognition.onerror = (e) => console.error("음성 인식 오류:", e);
+      recognition.start();
+
+      const { Engine, Render, Runner, World, Bodies, Events, Composite } =
+        Matter;
 
       const engine = Engine.create();
       const world = engine.world;
@@ -56,128 +76,126 @@
           width: window.innerWidth,
           height: window.innerHeight,
           wireframes: false,
-          background: "transparent",
+          background: "#fff",
         },
       });
 
       Render.run(render);
-      const runner = Runner.create();
-      Runner.run(runner, engine);
+      Runner.run(Runner.create(), engine);
 
       // 바닥
       const ground = Bodies.rectangle(
         window.innerWidth / 2,
-        window.innerHeight + 20,
+        window.innerHeight - 20,
         window.innerWidth,
         40,
-        { isStatic: true }
+        {
+          isStatic: true,
+          render: { visible: false },
+        }
       );
-      Composite.add(world, ground);
+      World.add(world, ground);
 
-      let hoCount = 0;
-      let heyShown = false;
+      const letters = ["호", "랑", "이", "다", "!"];
+      const bodies = [];
 
-      // Hey 전용 카테고리
-      const HEY_CATEGORY = 0x0002;
+      letters.forEach((char, index) => {
+        const x = 100 + Math.random() * (window.innerWidth - 200);
+        const y = -100 - index * 100;
 
-      function spawnHo(x, y) {
+        const body = Bodies.circle(x, y, 30, {
+          restitution: 0.3,
+          friction: 0.001,
+          label: `char-${index}`,
+          render: { visible: false },
+        });
+
         const div = document.createElement("div");
         div.className = "letter";
-
-        const colorOptions = [
-          { color: "red", restitution: 1.0 },
-          { color: "blue", restitution: 0.6 },
-          { color: "green", restitution: 0.3 },
-          { color: "orange", restitution: 0.8 },
-          { color: "purple", restitution: 0.5 },
-        ];
-        const picked =
-          colorOptions[Math.floor(Math.random() * colorOptions.length)];
-
-        div.textContent = "호";
-        div.style.color = picked.color;
+        div.textContent = char;
         document.body.appendChild(div);
 
-        const width = div.offsetWidth;
-        const height = div.offsetHeight;
-
-        const body = Bodies.rectangle(x, y, width, height, {
-          restitution: picked.restitution,
-          friction: 0.5,
-          frictionAir: 0.01,
-        });
-
-        const forceX = (Math.random() - 0.5) * 0.2;
-        const forceY = -Math.random() * 0.3 - 0.05;
-        Matter.Body.applyForce(body, { x, y }, { x: forceX, y: forceY });
-
         body.domElement = div;
-        Composite.add(world, body);
-      }
-
-      function showHeyText() {
-        const hey = document.createElement("div");
-        hey.className = "letter";
-        hey.textContent = "Hey";
-        hey.style.color = "black";
-        document.body.appendChild(hey);
-
-        const width = hey.offsetWidth;
-        const height = hey.offsetHeight;
-
-        const body = Bodies.rectangle(
-          window.innerWidth / 2,
-          window.innerHeight / 2,
-          width,
-          height,
-          {
-            isStatic: true,
-            collisionFilter: {
-              category: HEY_CATEGORY, // Hey만 드래그 가능
-            },
-          }
-        );
-
-        body.domElement = hey;
-        Composite.add(world, body);
-
-        // 이제서야 드래그 활성화
-        const mouse = Mouse.create(render.canvas);
-        const mouseConstraint = MouseConstraint.create(engine, {
-          mouse: mouse,
-          constraint: {
-            stiffness: 0.2,
-            render: { visible: false },
-          },
-          collisionFilter: {
-            mask: HEY_CATEGORY, // 오직 HEY만 드래그 가능
-          },
-        });
-        Composite.add(world, mouseConstraint);
-        render.mouse = mouse;
-      }
-
-      window.addEventListener("click", (e) => {
-        if (hoCount < 7) {
-          spawnHo(e.clientX, e.clientY);
-          hoCount++;
-
-          if (hoCount === 7 && !heyShown) {
-            showHeyText();
-            heyShown = true;
-          }
-        }
+        bodies.push(body);
+        World.add(world, body);
       });
 
+      // 위치 업데이트
       Events.on(engine, "afterUpdate", () => {
-        Composite.allBodies(world).forEach((body) => {
-          if (body.domElement) {
+        bodies.forEach((body) => {
+          if (!body.domElement.classList.contains("fixed")) {
             const { x, y } = body.position;
             body.domElement.style.left = `${x}px`;
             body.domElement.style.top = `${y}px`;
           }
         });
       });
+
+      // 충돌 감지 후 5초 뒤 드래그 가능한 고정 div로 전환
+      Events.on(engine, "collisionStart", (event) => {
+        event.pairs.forEach((pair) => {
+          [pair.bodyA, pair.bodyB].forEach((body) => {
+            if (
+              bodies.includes(body) &&
+              !body.domElement.classList.contains("fixed")
+            ) {
+              if (body.isPendingFix) return;
+              body.isPendingFix = true;
+
+              setTimeout(() => {
+                const { x, y } = body.position;
+                const div = body.domElement;
+
+                // Matter.js 제거
+                World.remove(world, body);
+
+                // 고정 + 드래그 가능하게 전환
+                div.classList.add("fixed");
+                div.style.left = `${x}px`;
+                div.style.top = `${y}px`;
+
+                // 드래그 이벤트 바인딩
+                makeDraggable(div);
+              }, 5000);
+            }
+          });
+        });
+      });
+
+      // ✅ 드래그 기능 구현
+      function makeDraggable(elem) {
+        let isDragging = false;
+        let offsetX, offsetY;
+
+        elem.addEventListener("mousedown", (e) => {
+          isDragging = true;
+          offsetX = e.clientX - elem.getBoundingClientRect().left;
+          offsetY = e.clientY - elem.getBoundingClientRect().top;
+          elem.style.cursor = "grabbing";
+        });
+
+        document.addEventListener("mousemove", (e) => {
+          if (!isDragging) return;
+          const x = e.clientX - offsetX;
+          const y = e.clientY - offsetY;
+          elem.style.left = `${x}px`;
+          elem.style.top = `${y}px`;
+        });
+
+        document.addEventListener("mouseup", () => {
+          isDragging = false;
+          elem.style.cursor = "grab";
+        });
+      }
+
+      function checkAndRemoveMatchingDiv(transcript) {
+        const fixedDivs = document.querySelectorAll(".fixed");
+        fixedDivs.forEach((div) => {
+          if (div.textContent === transcript) {
+            div.remove(); // 텍스트 일치하면 제거
+          }
+        });
+      }
     </script>
   </body>
 </html>

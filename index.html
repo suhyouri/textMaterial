@@ -69,6 +69,7 @@
         z-index: 10;
         text-shadow: -1px -1px 0 white, 1px -1px 0 white, -1px 1px 0 white,
           1px 1px 0 white;
+        transform: translate(-50%, -50%);
       }
 
       .circle {
@@ -153,32 +154,18 @@
         background-color: #f0f0f0;
       }
 
-      /* .draggable-word {
-        position: fixed;
-        left: 50%;
-        top: 50%;
-        transform: translate(-50%, -50%);
-        font-size: 1rem;
-        font-weight: 500;
-        color: black;
-        background-color: white;
-        cursor: grab;
-        user-select: none;
-        z-index: 99999;
-      } */
-
       @keyframes shake {
         0% {
           transform: translate(-50%, -50%) rotate(0deg);
         }
         25% {
-          transform: translate(-49%, -49%) rotate(1deg);
+          transform: translate(-49%, -49%) rotate(5deg);
         }
         50% {
           transform: translate(-50%, -50%) rotate(0deg);
         }
         75% {
-          transform: translate(-51%, -51%) rotate(-1deg);
+          transform: translate(-51%, -51%) rotate(-5deg);
         }
         100% {
           transform: translate(-50%, -50%) rotate(0deg);
@@ -187,6 +174,25 @@
 
       .shake-on-drag {
         animation: shake 0.15s infinite;
+      }
+
+      .word.draggable {
+        pointer-events: auto; /* 상호작용 가능하게 설정 */
+        cursor: grab; /* 마우스 커서를 손가락 모양으로 */
+      }
+
+      @keyframes blink {
+        0%,
+        100% {
+          opacity: 1; /* 완전히 보임 */
+        }
+        50% {
+          opacity: 0; /* 완전히 투명 */
+        }
+      }
+
+      .next.animate-blink {
+        animation: blink 1s infinite alternate; /* 1초 동안 무한히 깜빡임 (나타났다 사라졌다 반복) */
       }
     </style>
   </head>
@@ -198,7 +204,10 @@
         rel="noopener noreferrer"
         >서유리</a
       >
+      <br /><br />
+      <div class="next" style="display: none">▶</div>
     </div>
+
     <div class="progress-container">
       <div class="progress-bar" id="progressBar"></div>
     </div>
@@ -214,7 +223,26 @@
       <div class="consonant">ㄱ</div>
       <div class="consonantButton">다음 자음 ⇢</div>
     </div>
-    <!-- <div class="draggable-word">스</div> -->
+
+    <div
+      id="instructionDiv"
+      style="
+        position: fixed;
+        left: 50%;
+        top: 50%;
+        width: 80%;
+        transform: translate(-50%, -50%);
+        font-size: 1rem;
+        font-weight: 500;
+        color: black;
+        user-select: none;
+        z-index: 99999;
+        text-align: center;
+        display: none; /* Hide initially */
+      "
+    >
+      떨어진 글자들을 주워 좌측 상단부터 차례로 배열하세요.
+    </div>
 
     <script src="https://cdn.jsdelivr.net/npm/matter-js@0.19.0/build/matter.min.js"></script>
 
@@ -230,29 +258,107 @@
       const maxWords = 5;
       const wordElements = [];
 
-      let draggableDiv = null;
+      // 💡 이 부분에 아래 변수들을 추가/수정하세요
+      const matterBodies = []; // Matter.js 바디와 DOM 요소를 저장할 배열
+
+      let isDraggingWord = false; // 단어를 드래그 중인지 여부
+      let currentDraggedBody = null; // 현재 드래그 중인 Matter.js 바디
+      let currentDraggedElement = null; // 현재 드래그 중인 DOM 요소
+      let offsetX = 0; // 드래그 시작 시 마우스와 요소 왼쪽 상단 간의 X 오프셋
+      let offsetY = 0; // 드래그 시작 시 마우스와 요소 왼쪽 상단 간의 Y 오프셋
+
       let gravityMode = false;
       let consonants = "ㄴㄷㄹㅁㅂㅅㅇㅈㅊㅋㅍㅌㅎ";
       let consonantIndex = -1;
 
-      let isDragging = false;
-      let offsetX = 0;
-      let offsetY = 0;
+      // 💡 새로 추가할 변수: 드래그된 단어의 개수를 세는 카운터
+      let draggedWordCount = 0;
 
+      // 💡 새로 추가할 변수:
+      let isErasingMode = false; // 단어 지우기 모드인지 여부
+      let currentWordIndexToErase = 0; // 지워야 할 단어의 현재 인덱스
+
+      // 💡 이 부분을 기존의 mousemove 이벤트 리스너와 교체하세요
       document.addEventListener("mousemove", (e) => {
-        if (isDragging) {
-          draggableDiv.style.left = `${e.clientX - offsetX}px`;
-          draggableDiv.style.top = `${e.clientY - offsetY}px`;
+        if (isDraggingWord && currentDraggedElement && currentDraggedBody) {
+          // DOM 요소 위치 직접 업데이트 (left, top)
+          currentDraggedElement.style.left = `${e.clientX - offsetX}px`;
+          currentDraggedElement.style.top = `${e.clientY - offsetY}px`;
+
+          // Matter.js 바디 위치도 DOM 요소에 맞춰 업데이트
+          Matter.Body.setPosition(currentDraggedBody, {
+            x: e.clientX - offsetX + currentDraggedElement.offsetWidth / 2,
+            y: e.clientY - offsetY + currentDraggedElement.offsetHeight / 2,
+          });
+          // 💡 currentDraggedElement.style.transform은 여기서 직접 조작하지 않습니다.
+          // shake-on-drag 클래스가 붙어있으므로 CSS 애니메이션이 transform을 제어합니다.
         }
       });
 
+      // 💡 mouseup 이벤트 리스너 내부
+      // 💡 mouseup 이벤트 리스너 내부 수정:
       document.addEventListener("mouseup", () => {
-        isDragging = false;
-        if (draggableDiv) {
-          draggableDiv.style.cursor = "grab";
-          draggableDiv.classList.remove("shake-on-drag");
+        if (isDraggingWord && currentDraggedElement && currentDraggedBody) {
+          isDraggingWord = false;
+          currentDraggedElement.style.cursor = "grab";
+          currentDraggedElement.classList.remove("shake-on-drag");
+
+          currentDraggedElement.style.transform = `translate(-50%, -50%)`; // 기본 transform 유지
+
+          Matter.Body.setStatic(currentDraggedBody, true);
+
+          const draggedItem = matterBodies.find(
+            (item) => item.body === currentDraggedBody
+          );
+          if (draggedItem) {
+            // 드래그된 아이템을 찾았을 때만
+            // 💡 여기에서 최종 위치를 저장합니다.
+            draggedItem.finalX =
+              currentDraggedElement.offsetLeft +
+              currentDraggedElement.offsetWidth / 2;
+            draggedItem.finalY =
+              currentDraggedElement.offsetTop +
+              currentDraggedElement.offsetHeight / 2;
+
+            if (!draggedItem.isDragged) {
+              // 한 번도 드래그되지 않은 경우에만 카운트 증가
+              draggedItem.isDragged = true;
+              draggedWordCount++;
+            }
+
+            if (draggedWordCount === matterBodies.length) {
+              console.log("모든 단어가 한 번 이상 드래그되었습니다!");
+              // 💡 이 시점에서 단어를 정렬합니다.
+              sortWordsByPosition(); // 새로운 함수 호출
+              revealAllWords();
+              document.querySelector(".next").classList.add("animate-blink");
+            }
+          }
+
+          currentDraggedBody = null;
+          currentDraggedElement = null;
         }
       });
+
+      // 💡 새로 추가할 함수:
+      function sortWordsByPosition() {
+        // Y 좌표(수직 위치)를 기준으로 먼저 정렬하고, Y 좌표가 비슷하면 X 좌표(수평 위치)로 정렬
+        matterBodies.sort((a, b) => {
+          // Y 좌표 차이가 일정 임계값 이하면 같은 줄로 간주
+          const Y_THRESHOLD = 30; // 픽셀 단위로 조절
+          if (Math.abs(a.finalY - b.finalY) < Y_THRESHOLD) {
+            // 같은 줄로 간주, X 좌표로 정렬
+            return a.finalX - b.finalX;
+          }
+          // 다른 줄이면 Y 좌표로 정렬
+          return a.finalY - b.finalY;
+        });
+
+        console.log(
+          "정렬된 단어 순서:",
+          matterBodies.map((item) => item.word)
+        );
+      }
 
       document
         .querySelector(".consonantButton")
@@ -294,37 +400,8 @@
 
           if (wordCount === maxWords) {
             document.getElementById("circle").style.display = "block";
-            circle.style.display = "flex";
+            document.getElementById("circle").style.display = "flex"; // Ensure it's flex for content centering
           }
-        } else {
-          const temp = document.createElement("span");
-          temp.className = "word";
-          temp.textContent = word;
-          temp.style.left = "-9999px";
-          document.body.appendChild(temp);
-
-          const width = temp.offsetWidth + 8;
-          const height = temp.offsetHeight + 4;
-          temp.remove();
-
-          //boxxxxxxxxxxx
-          const body = Bodies.rectangle(x, y, width, height, {
-            restitution: 0.4,
-            friction: 0.3,
-            density: word.length * 0.001 + 0.001,
-            render: { visible: true },
-          });
-
-          const domBox = document.createElement("div");
-          domBox.className = "word";
-          domBox.style.width = `${width}px`;
-          domBox.style.height = `${height}px`;
-          domBox.style.lineHeight = `${height}px`;
-          domBox.textContent = word;
-
-          document.body.appendChild(domBox);
-          body.domElement = domBox;
-          Composite.add(world, body);
         }
       }
 
@@ -332,7 +409,61 @@
         const transcript =
           event.results[event.results.length - 1][0].transcript;
         const words = transcript.trim().split(/\s+/);
-        words.forEach(showWord);
+
+        if (!isErasingMode) {
+          words.forEach(showWord);
+        } else {
+          const recognizedPhrase = transcript.trim();
+          console.log("인식된 문구 (지우기 모드):", recognizedPhrase);
+
+          if (currentWordIndexToErase < matterBodies.length) {
+            const targetWordItem = matterBodies[currentWordIndexToErase];
+            const targetWord = targetWordItem.word;
+
+            // 인식된 문구가 지워야 할 단어를 포함하는지 확인 (대소문자 무시를 위해 toLowerCase() 사용 가능)
+            if (recognizedPhrase.includes(targetWord)) {
+              console.log(`'${targetWord}' 단어를 인식했습니다. 제거합니다.`);
+              Matter.Composite.remove(world, targetWordItem.body);
+              targetWordItem.domElement.remove();
+
+              // 이전 단어 강조 해제 (만약 이전 단어가 존재한다면)
+              if (currentWordIndexToErase > 0) {
+                matterBodies[
+                  currentWordIndexToErase - 1
+                ].domElement.style.textDecoration = "none";
+                matterBodies[
+                  currentWordIndexToErase - 1
+                ].domElement.style.fontWeight = "normal";
+              }
+
+              // 다음 단어로 인덱스 이동
+              currentWordIndexToErase++;
+
+              // 💡 다음 단어 강조 (선택 사항)
+              if (currentWordIndexToErase < matterBodies.length) {
+                matterBodies[
+                  currentWordIndexToErase
+                ].domElement.style.textDecoration = "underline";
+                matterBodies[
+                  currentWordIndexToErase
+                ].domElement.style.fontWeight = "bold";
+              } else {
+                // 모든 단어를 지웠을 때
+                document.getElementById("instructionDiv").textContent =
+                  "모든 단어를 지웠습니다!";
+                recognition.stop();
+                document
+                  .querySelector(".next")
+                  .classList.remove("animate-blink");
+                document.querySelector(".next").style.display = "none";
+              }
+            } else {
+              console.log(
+                `'${targetWord}'(을)를 찾지 못했습니다. 다시 시도하세요.`
+              );
+            }
+          }
+        }
       };
 
       recognition.onerror = (event) => {
@@ -340,7 +471,8 @@
       };
 
       recognition.onend = () => {
-        if (!gravityMode) {
+        // 💡 isErasingMode일 때도 계속 인식하도록 합니다.
+        if (!gravityMode || isErasingMode) {
           recognition.start();
         }
       };
@@ -371,7 +503,7 @@
         window.innerHeight + 20,
         window.innerWidth,
         40,
-        { isStatic: true }
+        { isStatic: true, render: { fillStyle: "gray" } } // Add this line
       );
       Composite.add(world, ground);
       // 추가
@@ -383,7 +515,7 @@
         window.innerHeight / 2, // y 위치: 화면 중앙
         thickness, // 폭
         window.innerHeight, // 높이
-        { isStatic: true }
+        { isStatic: true, render: { fillStyle: "gray" } } // Add this line
       );
 
       const rightWall = Bodies.rectangle(
@@ -391,20 +523,31 @@
         window.innerHeight / 2,
         thickness,
         window.innerHeight,
-        { isStatic: true }
+        { isStatic: true, render: { fillStyle: "gray" } } // Add this line
       );
 
       Composite.add(world, [leftWall, rightWall]);
 
       Events.on(engine, "afterUpdate", () => {
-        Composite.allBodies(world).forEach((body) => {
-          if (body.domElement) {
-            const { x, y } = body.position;
-            const w = body.bounds.max.x - body.bounds.min.x;
-            const h = body.bounds.max.y - body.bounds.min.y;
-            body.domElement.style.left = `${x - w / 2}px`;
-            body.domElement.style.top = `${y - h / 2}px`;
+        matterBodies.forEach(({ body, domElement }) => {
+          const { x, y } = body.position;
+          const angle = body.angle;
+          const w = body.bounds.max.x - body.bounds.min.x;
+          const h = body.bounds.max.y - body.bounds.min.y;
+
+          // DOM 요소의 위치 (left, top)는 Matter.js 바디 위치에 따라 항상 업데이트
+          domElement.style.left = `${x - w / 2}px`;
+          domElement.style.top = `${y - h / 2}px`;
+
+          // 💡 수정: 'shake-on-drag' 클래스가 없으면 Matter.js의 회전값을 적용
+          // 이 클래스가 있다면 CSS 애니메이션이 transform을 제어하게 됩니다.
+          if (!domElement.classList.contains("shake-on-drag")) {
+            domElement.style.transform = `rotate(${angle}rad)`;
           }
+          // 만약 shake-on-drag 클래스가 있다면, 해당 클래스의 @keyframes shake가 transform을 제어합니다.
+          // translate(-50%, -50%) 부분은 word CSS에 고정되어야 할 수도 있습니다.
+          // 하지만 현재 애니메이션은 translate(-50%, -50%)도 포함하므로,
+          // CSS에서 .word에 transform: translate(-50%, -50%);를 기본으로 두지 않는 한 괜찮습니다.
         });
       });
 
@@ -427,14 +570,15 @@
           const y = rect.top + height / 2;
 
           const body = Bodies.rectangle(x, y, width, height, {
-            restitution: 0.2,
+            restitution: 0.9,
             friction: 0.1,
             frictionAir: 0.01, // 공기 마찰 (회전 감속)
             angularDamping: 0.3, // 회전 감쇠
             density: word.length * 0.001 + 0.001,
-            render: { visible: false },
+            render: { visible: true, fillStyle: "black" }, // false로 하면 박스 사라맂ㅁ
           });
 
+          //생겨나는 텍스트 css 정리하기
           const domBox = document.createElement("div");
           domBox.className = "word";
           domBox.style.width = `${width}px`;
@@ -442,41 +586,97 @@
           domBox.style.lineHeight = `${height}px`;
           domBox.textContent = word;
 
+          // domBox.style.backgroundColor = "black"; // DOM 요소 배경색 검정색으로
+          domBox.style.color = "transparent"; // 텍스트 색상을 흰색으로 변경
+          domBox.style.textShadow = "none"; // **이 줄을 추가하여 text-shadow 제거**
+
           document.body.appendChild(domBox);
           body.domElement = domBox;
 
           Composite.add(world, body);
+
+          matterBodies.push({
+            body,
+            domElement: domBox,
+            isDragged: false,
+            word: word,
+          });
         });
 
         document.getElementById("circle").remove();
+        document.getElementById("instructionDiv").style.display = "block"; // 💡 instructionDiv 표시
 
-        // ✅ 여기서 생성
-        draggableDiv = document.createElement("div");
-        draggableDiv.textContent = "스";
-        draggableDiv.style.position = "fixed";
-        draggableDiv.style.left = "50%";
-        draggableDiv.style.top = "50%";
-        draggableDiv.style.transform = "translate(-50%, -50%)";
-        draggableDiv.style.fontSize = "1rem";
-        draggableDiv.style.cursor = "grab";
-        draggableDiv.style.userSelect = "none";
-        draggableDiv.style.zIndex = "99999";
-        document.body.appendChild(draggableDiv);
+        // 💡 5초 후에 단어들을 드래그 가능하게 만드는 로직
+        setTimeout(() => {
+          document.getElementById("instructionDiv").textContent =
+            "떨어진 글자들을 주워 좌측 상단부터 차례로 배열하세요."; // 지시문 변경
+          // document.getElementById("instructionDiv").remove(); // 또는 지시문 div를 제거하고 싶다면 이 줄을 활성화
+          document.querySelector(".next").style.display = "block";
+          matterBodies.forEach(({ body, domElement }) => {
+            domElement.classList.add("draggable"); // CSS 클래스 추가 (커서 변경 위함)
+            domElement.style.pointerEvents = "auto"; // 마우스 이벤트 활성화
 
-        // ✅ 이벤트 연결
-        draggableDiv.addEventListener("mousedown", (e) => {
-          isDragging = true;
-          offsetX = e.clientX - draggableDiv.getBoundingClientRect().left;
-          offsetY = e.clientY - draggableDiv.getBoundingClientRect().top;
-          draggableDiv.style.cursor = "grabbing";
-          draggableDiv.classList.add("shake-on-drag"); // 흔들림 효과 ON
-        });
+            // 💡 mousedown 이벤트 리스너 내부
+            domElement.addEventListener("mousedown", (e) => {
+              isDraggingWord = true;
+              currentDraggedBody = body;
+              currentDraggedElement = domElement;
+
+              const rect = currentDraggedElement.getBoundingClientRect();
+              offsetX = e.clientX - rect.left;
+              offsetY = e.clientY - rect.top;
+
+              Matter.Body.setStatic(currentDraggedBody, true);
+
+              currentDraggedElement.style.cursor = "grabbing";
+              // 💡 추가: 드래그 시작 시 기존 transform을 초기화하여 애니메이션이 깔끔하게 적용되도록 합니다.
+              // 이렇게 하면 애니메이션이 0% 상태부터 시작합니다.
+              currentDraggedElement.style.transform = ``; // 기존 transform을 완전히 초기화
+
+              currentDraggedElement.classList.add("shake-on-drag");
+            });
+          });
+        }, 3000); // 3초 지연
       });
 
       // 모바일 환경 감지 및 경고 표시
       const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
       if (isMobile) {
         document.getElementById("mobileWarning").style.display = "flex";
+      }
+
+      // 💡 새로 추가할 함수: 모든 단어의 fillStyle 제거 및 텍스트 표시
+      function revealAllWords() {
+        matterBodies.forEach(({ body, domElement }) => {
+          if (body.render) {
+            body.render.fillStyle = "rgba(0, 0, 0, 0)";
+          }
+          domElement.style.color = "black";
+          domElement.style.backgroundColor = "transparent";
+          // 💡 단어 드래그 불가능하게 만듭니다 (새로운 모드이므로).
+          domElement.classList.remove("draggable");
+          domElement.style.pointerEvents = "none";
+          domElement.style.cursor = "default";
+        });
+
+        document.querySelector(".next").classList.add("animate-blink");
+
+        // 💡 단어 지우기 모드 활성화 및 음성 인식 재시작
+        isErasingMode = true;
+        recognition.start(); // 음성 인식 재시작
+
+        // 💡 지시문 업데이트
+        document.getElementById("instructionDiv").textContent =
+          "지정된 순서대로 단어를 말하여 지우세요.";
+
+        // 💡 첫 번째 단어 강조 (정렬된 후의 첫 번째 단어)
+        if (matterBodies.length > 0) {
+          matterBodies[
+            currentWordIndexToErase
+          ].domElement.style.textDecoration = "underline";
+          matterBodies[currentWordIndexToErase].domElement.style.fontWeight =
+            "bold";
+        }
       }
     </script>
   </body>
