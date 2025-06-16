@@ -244,7 +244,14 @@
   </head>
   <body>
     <div class="title">
-      텍스트의 무게를 감각하기<br /><a
+      <a
+        href="./index.html"
+        target="_self"
+        rel="noopener noreferrer"
+        style="font-weight: 600"
+        >텍스트의 무게를 감각하기</a
+      >
+      <br /><a
         href="https://www.instagram.com/suhyouri"
         target="_blank"
         rel="noopener noreferrer"
@@ -278,7 +285,7 @@
         top: 50%;
         width: 80%;
         transform: translate(-50%, -50%);
-        font-size: 1rem;
+        font-size: 1.2rem;
         font-weight: 500;
         color: black;
         user-select: none;
@@ -824,7 +831,9 @@
       }
 
       // 💡 새로 추가할 함수: 현재 단어를 제거하고 다음 단어로 진행
+      // 💡 새로 추가할 함수: 현재 단어를 제거하고 다음 단어로 진행
       function removeCurrentWordAndAdvance() {
+        // 'indexToErase' 파라미터는 사용되지 않으므로 제거해도 좋습니다.
         const targetWordItem = matterBodies[currentWordIndexToErase];
 
         // Matter.js 바디 제거
@@ -833,7 +842,10 @@
         targetWordItem.domElement.remove();
 
         // 이전 단어 강조 해제 (만약 이전 단어가 존재한다면)
-        if (currentWordIndexToErase > 0) {
+        if (
+          currentWordIndexToErase > 0 &&
+          matterBodies[currentWordIndexToErase - 1]
+        ) {
           matterBodies[
             currentWordIndexToErase - 1
           ].domElement.style.textDecoration = "none";
@@ -843,11 +855,10 @@
         }
 
         // 다음 단어로 인덱스 이동
-        currentWordIndexToEerase++;
+        currentWordIndexToErase++; // 오타 수정된 부분
 
         // 💡 첫 번째 단어가 지워지면 지시문 숨기기
         if (currentWordIndexToErase === 1) {
-          // 첫 번째 단어 제거 후 currentWordIndexToErase는 1이 됩니다.
           document.getElementById("instructionDiv").style.display = "none";
         }
 
@@ -860,22 +871,10 @@
             "bold";
         } else {
           // 모든 단어를 지웠을 때
-          document.getElementById("instructionDiv").textContent =
-            "모든 단어를 지웠습니다!";
-          document.getElementById("instructionDiv").style.display = "block"; // 최종 메시지는 다시 표시
-          recognition.stop();
-          document.querySelector(".next").classList.remove("animate-blink");
-          document.querySelector(".next").style.display = "none";
-
-          // 💡 박수 감지기 시작!
-          startClapDetector();
-        }
-
-        // 모든 단어를 지웠을 때
-        if (currentWordIndexToErase >= matterBodies.length) {
-          // 모든 단어가 지워진 최종 조건
           const instructionDiv = document.getElementById("instructionDiv");
-          instructionDiv.textContent = "모든 단어를 지웠습니다!";
+          // textContent 대신 innerHTML을 사용하여 HTML 태그를 삽입합니다.
+          instructionDiv.innerHTML = `👏👏👏<br><br><a href="./index.html" style="font-size: 1.2rem; color: black;">다시하기</a>`;
+
           instructionDiv.style.display = "block"; // 최종 메시지는 다시 표시
           instructionDiv.style.opacity = "1"; // 완전히 보이게
           recognition.stop();
