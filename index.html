@@ -154,7 +154,7 @@
 
       button {
         /* margin-top: 0.5rem; */
-        width: 30%;
+        width: 40%;
         font-size: 0.9rem;
         color: black;
         display: block; /* 한 줄 차지 */
@@ -286,7 +286,7 @@
         >ⓒ서유리</a
       ><br />
       <br />
-      <button id="btn-ko">한국어</button>
+      <button id="btn-ko">➡ 한국어</button>
       <button id="btn-en">ENG</button>
       <br /><br />
       <div class="next" style="display: none">▶</div>
@@ -335,14 +335,14 @@
       const textData = {
         ko: {
           title: "텍스트의 무게를 감각하기",
-          author: "서유리",
+          author: "©서유리",
           scoreInstruction: "다음의 자음으로 시작하는 문장을 말하세요 :",
           nextConsonant: "다음 자음 ⇢",
           mobileWarning:
             "본 프로젝트는 <br />데스크탑 환경에 최적화되어 있습니다.<br />데스크탑으로 접속해주세요.",
           instructionArrange:
             "떨어진 글자들을 주워 좌측 상단부터 차례로 배열하세요.",
-          instructionErase: "순서대로 단어를 말하세요.",
+          instructionErase: "밑줄 친 단어를 말하세요.",
           instructionCleared: "모든 단어를 말했습니다!",
           finalMessage: "👏 수고하셨습니다 👏",
           retry: "다시하기",
@@ -351,7 +351,7 @@
         },
         en: {
           title: "Sensing the Weight of Text",
-          author: "Youri Suh",
+          author: "©Youri Suh",
           scoreInstruction:
             "Say a sentence that starts with the following consonant:",
           nextConsonant: "Next Consonant ⇢",
@@ -359,7 +359,7 @@
             "This project is optimized for a desktop environment.<br />Please access it from a desktop.",
           instructionArrange:
             "Pick up the fallen letters and arrange them in order from the top left.",
-          instructionErase: "Say the words.",
+          instructionErase: "Please Say the underlined words.",
           instructionCleared: "You have spoken all the words!",
           finalMessage: "👏 Well Done! 👏",
           retry: "Retry",
@@ -753,12 +753,16 @@
         instructionDiv.style.display = "block";
         instructionDiv.style.opacity = "1";
 
+        // ✨ 이 부분의 시간을 조절하세요.
+        // 예: 5초 동안 보여준 뒤에 사라지게 하려면 5000으로 변경
         setTimeout(() => {
           instructionDiv.style.opacity = "0";
+
+          // CSS의 transition 시간과 맞춰주는 것이 좋습니다. (위에서 4초로 바꿨다면 여기도 4000)
           setTimeout(() => {
             instructionDiv.style.display = "none";
-          }, 2000);
-        }, 10000);
+          }, 4000);
+        }, 5000); // 5초 후에 사라지기 시작
 
         currentWordAttemptCount = 0;
 
@@ -862,6 +866,7 @@
         }
       }
 
+      // 화면의 텍스트를 현재 언어 설정에 맞게 업데이트하는 함수
       function updateTextOnScreen() {
         const lang = textData[currentLang];
 
@@ -890,6 +895,19 @@
           if (consonantIndex < currentSet.length) {
             consonantElement.textContent = currentSet[consonantIndex];
           }
+        }
+
+        // ✨ 요청하신 버튼 텍스트 업데이트 로직 추가
+        const btnKo = document.getElementById("btn-ko");
+        const btnEn = document.getElementById("btn-en");
+
+        if (currentLang === "ko") {
+          btnKo.innerHTML = "➡ 한국어";
+          btnEn.innerHTML = "ENG";
+        } else {
+          // currentLang === 'en'
+          btnKo.innerHTML = "한국어";
+          btnEn.innerHTML = "➡ ENG";
         }
       }
 
