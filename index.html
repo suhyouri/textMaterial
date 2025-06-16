@@ -152,6 +152,24 @@
         margin-left: auto; /* 우측 정렬 */
       }
 
+      button {
+        /* margin-top: 0.5rem; */
+        width: 30%;
+        font-size: 0.9rem;
+        color: black;
+        display: block; /* 한 줄 차지 */
+        /* padding: 0.3rem 0.8rem; */
+        padding: 0;
+        background-color: white;
+        transition: background-color 0.2s ease;
+        text-align: left; /* 내부 텍스트 중앙 정렬 */
+        cursor: pointer;
+        border: 0px solid black;
+
+        /* border-radius: 8px; */
+        /* margin-left: auto; 우측 정렬 */
+      }
+
       .consonantButton:hover {
         background-color: #f0f0f0;
       }
@@ -240,6 +258,16 @@
         opacity: 1; /* 기본 투명도 100% */
         transition: opacity 2s ease-out; /* 2초에 걸쳐 부드럽게 사라지도록 설정 */
       }
+
+      #translate-btn:hover {
+        color: #ff0000;
+      }
+
+      /* 버튼이 비활성화됐을 때 스타일 */
+      button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
     </style>
   </head>
   <body>
@@ -255,8 +283,11 @@
         href="https://www.instagram.com/suhyouri"
         target="_blank"
         rel="noopener noreferrer"
-        >서유리</a
-      >
+        >ⓒ서유리</a
+      ><br />
+      <br />
+      <button id="btn-ko">한국어</button>
+      <button id="btn-en">ENG</button>
       <br /><br />
       <div class="next" style="display: none">▶</div>
     </div>
@@ -300,6 +331,49 @@
     <script src="https://cdn.jsdelivr.net/npm/matter-js@0.19.0/build/matter.min.js"></script>
 
     <script>
+      // 언어 텍스트를 관리하는 객체
+      const textData = {
+        ko: {
+          title: "텍스트의 무게를 감각하기",
+          author: "서유리",
+          scoreInstruction: "다음의 자음으로 시작하는 문장을 말하세요 :",
+          nextConsonant: "다음 자음 ⇢",
+          mobileWarning:
+            "본 프로젝트는 <br />데스크탑 환경에 최적화되어 있습니다.<br />데스크탑으로 접속해주세요.",
+          instructionArrange:
+            "떨어진 글자들을 주워 좌측 상단부터 차례로 배열하세요.",
+          instructionErase: "순서대로 단어를 말하세요.",
+          instructionCleared: "모든 단어를 말했습니다!",
+          finalMessage: "👏 수고하셨습니다 👏",
+          retry: "다시하기",
+          micPermission:
+            "마이크 접근 권한이 필요합니다. 페이지를 새로고침하여 권한을 허용해주세요.",
+        },
+        en: {
+          title: "Sensing the Weight of Text",
+          author: "Youri Suh",
+          scoreInstruction:
+            "Say a sentence that starts with the following consonant:",
+          nextConsonant: "Next Consonant ⇢",
+          mobileWarning:
+            "This project is optimized for a desktop environment.<br />Please access it from a desktop.",
+          instructionArrange:
+            "Pick up the fallen letters and arrange them in order from the top left.",
+          instructionErase: "Say the words.",
+          instructionCleared: "You have spoken all the words!",
+          finalMessage: "👏 Well Done! 👏",
+          retry: "Retry",
+          micPermission:
+            "Microphone access is required. Please refresh the page and grant permission.",
+        },
+      };
+
+      // 현재 언어 설정 (기본값: 한국어)
+      let currentLang = "ko";
+
+      // ✨ 1. 언어 변경 잠금 상태를 저장할 변수 추가
+      let isLanguageLocked = false;
+
       const SpeechRecognition =
         window.SpeechRecognition || window.webkitSpeechRecognition;
       const recognition = new SpeechRecognition();
@@ -311,65 +385,49 @@
       const maxWords = 5;
       const wordElements = [];
 
-      // 💡 이 부분에 아래 변수들을 추가/수정하세요
-      const matterBodies = []; // Matter.js 바디와 DOM 요소를 저장할 배열
+      const matterBodies = [];
 
-      let isDraggingWord = false; // 단어를 드래그 중인지 여부
-      let currentDraggedBody = null; // 현재 드래그 중인 Matter.js 바디
-      let currentDraggedElement = null; // 현재 드래그 중인 DOM 요소
-      let offsetX = 0; // 드래그 시작 시 마우스와 요소 왼쪽 상단 간의 X 오프셋
-      let offsetY = 0; // 드래그 시작 시 마우스와 요소 왼쪽 상단 간의 Y 오프셋
+      let isDraggingWord = false;
+      let currentDraggedBody = null;
+      let currentDraggedElement = null;
+      let offsetX = 0;
+      let offsetY = 0;
 
       let gravityMode = false;
-      let consonants = "ㄴㄷㄹㅁㅂㅅㅇㅈㅊㅋㅍㅌㅎ";
-      let consonantIndex = -1;
+      const consonants_ko = "ㄱㄴㄷㄹㅁㅂㅅㅇㅈㅊㅋㅍㅌㅎ";
+      const consonants_en = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+      let consonantIndex = 0;
 
-      // 💡 새로 추가할 변수: 드래그된 단어의 개수를 세는 카운터
       let draggedWordCount = 0;
+      let isErasingMode = false;
+      let currentWordIndexToErase = 0;
 
-      // 💡 새로 추가할 변수:
-      let isErasingMode = false; // 단어 지우기 모드인지 여부
-      let currentWordIndexToErase = 0; // 지워야 할 단어의 현재 인덱스
+      const MAX_ATTEMPTS = 3;
+      let currentWordAttemptCount = 0;
 
-      // 💡 새로 추가할 변수:
-      const MAX_ATTEMPTS = 3; // 최대 시도 횟수
-      let currentWordAttemptCount = 0; // 현재 단어에 대한 시도 횟수
-
-      // 💡 이 부분을 기존의 mousemove 이벤트 리스너와 교체하세요
       document.addEventListener("mousemove", (e) => {
         if (isDraggingWord && currentDraggedElement && currentDraggedBody) {
-          // DOM 요소 위치 직접 업데이트 (left, top)
           currentDraggedElement.style.left = `${e.clientX - offsetX}px`;
           currentDraggedElement.style.top = `${e.clientY - offsetY}px`;
-
-          // Matter.js 바디 위치도 DOM 요소에 맞춰 업데이트
           Matter.Body.setPosition(currentDraggedBody, {
             x: e.clientX - offsetX + currentDraggedElement.offsetWidth / 2,
             y: e.clientY - offsetY + currentDraggedElement.offsetHeight / 2,
           });
-          // 💡 currentDraggedElement.style.transform은 여기서 직접 조작하지 않습니다.
-          // shake-on-drag 클래스가 붙어있으므로 CSS 애니메이션이 transform을 제어합니다.
         }
       });
 
-      // 💡 mouseup 이벤트 리스너 내부
-      // 💡 mouseup 이벤트 리스너 내부 수정:
       document.addEventListener("mouseup", () => {
         if (isDraggingWord && currentDraggedElement && currentDraggedBody) {
           isDraggingWord = false;
           currentDraggedElement.style.cursor = "grab";
           currentDraggedElement.classList.remove("shake-on-drag");
-
-          currentDraggedElement.style.transform = `translate(-50%, -50%)`; // 기본 transform 유지
-
+          currentDraggedElement.style.transform = `translate(-50%, -50%)`;
           Matter.Body.setStatic(currentDraggedBody, true);
 
           const draggedItem = matterBodies.find(
             (item) => item.body === currentDraggedBody
           );
           if (draggedItem) {
-            // 드래그된 아이템을 찾았을 때만
-            // 💡 여기에서 최종 위치를 저장합니다.
             draggedItem.finalX =
               currentDraggedElement.offsetLeft +
               currentDraggedElement.offsetWidth / 2;
@@ -378,15 +436,13 @@
               currentDraggedElement.offsetHeight / 2;
 
             if (!draggedItem.isDragged) {
-              // 한 번도 드래그되지 않은 경우에만 카운트 증가
               draggedItem.isDragged = true;
               draggedWordCount++;
             }
 
             if (draggedWordCount === matterBodies.length) {
               console.log("모든 단어가 한 번 이상 드래그되었습니다!");
-              // 💡 이 시점에서 단어를 정렬합니다.
-              sortWordsByPosition(); // 새로운 함수 호출
+              sortWordsByPosition();
               revealAllWords();
               document.querySelector(".next").classList.add("animate-blink");
             }
@@ -397,20 +453,14 @@
         }
       });
 
-      // 💡 새로 추가할 함수:
       function sortWordsByPosition() {
-        // Y 좌표(수직 위치)를 기준으로 먼저 정렬하고, Y 좌표가 비슷하면 X 좌표(수평 위치)로 정렬
         matterBodies.sort((a, b) => {
-          // Y 좌표 차이가 일정 임계값 이하면 같은 줄로 간주
-          const Y_THRESHOLD = 30; // 픽셀 단위로 조절
+          const Y_THRESHOLD = 30;
           if (Math.abs(a.finalY - b.finalY) < Y_THRESHOLD) {
-            // 같은 줄로 간주, X 좌표로 정렬
             return a.finalX - b.finalX;
           }
-          // 다른 줄이면 Y 좌표로 정렬
           return a.finalY - b.finalY;
         });
-
         console.log(
           "정렬된 단어 순서:",
           matterBodies.map((item) => item.word)
@@ -422,14 +472,16 @@
         .addEventListener("click", () => {
           consonantIndex++;
 
-          if (consonantIndex >= consonants.length) {
-            // 자음 끝났으면 요소 숨기기
+          const currentConsonantSet =
+            currentLang === "en" ? consonants_en : consonants_ko;
+
+          if (consonantIndex >= currentConsonantSet.length) {
             document.querySelector(".consonant").style.display = "none";
             document.querySelector(".consonantButton").style.display = "none";
             document.querySelector(".score").style.display = "none";
           } else {
             document.querySelector(".consonant").textContent =
-              consonants[consonantIndex];
+              currentConsonantSet[consonantIndex];
           }
         });
 
@@ -457,21 +509,44 @@
 
           if (wordCount === maxWords) {
             document.getElementById("circle").style.display = "block";
-            document.getElementById("circle").style.display = "flex"; // Ensure it's flex for content centering
+            document.getElementById("circle").style.display = "flex";
           }
         }
       }
-
+      // recognition.onresult 함수
       recognition.onresult = (event) => {
+        // 언어 설정 잠금 로직: 음성 인식이 최초로 성공하면 버튼을 비활성화합니다.
+        if (!isLanguageLocked) {
+          isLanguageLocked = true;
+          document.getElementById("btn-ko").disabled = true;
+          document.getElementById("btn-en").disabled = true;
+        }
+
         const transcript =
           event.results[event.results.length - 1][0].transcript;
-        // const words = transcript.trim().split(/\s+/); // 이 변수는 현재 사용되지 않습니다.
 
+        // 단어 '생성' 모드일 때만 필터링을 적용합니다.
         if (!isErasingMode) {
-          // 기존 단어 생성 로직
-          transcript.trim().split(/\s+/).forEach(showWord);
+          const words = transcript.trim().split(/\s+/);
+
+          // 언어 필터링 로직 추가
+          const filteredWords = words.filter((word) => {
+            if (currentLang === "ko") {
+              // 한국어 모드: 한글 자모 또는 완성형 글자가 하나라도 포함된 단어만 허용
+              const koreanRegex = /[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/;
+              return koreanRegex.test(word);
+            } else {
+              // currentLang === 'en'
+              // 영어 모드: 온전히 영어 알파벳으로만 구성된 단어만 허용
+              const englishRegex = /^[a-zA-Z]+$/;
+              return englishRegex.test(word);
+            }
+          });
+
+          // 필터링된 단어들만 화면에 표시합니다.
+          filteredWords.forEach(showWord);
         } else {
-          // 단어 지우기 모드
+          // 단어 '지우기' 모드
           const recognizedPhrase = transcript.trim();
           console.log("인식된 문구 (지우기 모드):", recognizedPhrase);
 
@@ -479,40 +554,34 @@
             const targetWordItem = matterBodies[currentWordIndexToErase];
             const targetWord = targetWordItem.word;
 
-            // 인식된 문구가 지워야 할 단어를 포함하는지 확인
-            if (recognizedPhrase.includes(targetWord)) {
+            // ✨ 변경된 부분: toLowerCase()를 사용하여 대소문자 구분 없이 비교
+            if (
+              recognizedPhrase.toLowerCase().includes(targetWord.toLowerCase())
+            ) {
               console.log(`'${targetWord}' 단어를 인식했습니다. 제거합니다.`);
-              // 단어 제거 및 다음 단어로 이동
               removeCurrentWordAndAdvance();
-              // 💡 성공했으므로 시도 횟수 초기화
               currentWordAttemptCount = 0;
             } else {
-              // 💡 인식 실패 시 시도 횟수 증가
               currentWordAttemptCount++;
               console.log(
                 `'${targetWord}'(을)를 찾지 못했습니다. 다시 시도하세요. (시도 ${currentWordAttemptCount}/${MAX_ATTEMPTS})`
               );
-
               if (currentWordAttemptCount >= MAX_ATTEMPTS) {
                 console.log(
                   `3번 시도 실패. '${targetWord}' 단어를 자동으로 제거합니다.`
                 );
-                // 💡 시도 횟수 초과 시 강제 제거 및 다음 단어로 이동
                 removeCurrentWordAndAdvance();
-                // 💡 강제 제거 후에도 시도 횟수 초기화
                 currentWordAttemptCount = 0;
               }
             }
           }
         }
       };
-
       recognition.onerror = (event) => {
         console.error("Speech recognition error:", event.error);
       };
 
       recognition.onend = () => {
-        // 💡 isErasingMode일 때도 계속 인식하도록 합니다.
         if (!gravityMode || isErasingMode) {
           recognition.start();
         }
@@ -523,7 +592,6 @@
       const { Engine, Render, Runner, Bodies, Composite, Events } = Matter;
       const engine = Engine.create();
       const world = engine.world;
-
       const render = Render.create({
         element: document.body,
         engine: engine,
@@ -544,91 +612,56 @@
         window.innerHeight + 20,
         window.innerWidth,
         40,
-        { isStatic: true, render: { fillStyle: "gray" } } // Add this line
+        { isStatic: true, render: { fillStyle: "gray" } }
       );
       Composite.add(world, ground);
-      // 추가
 
-      const thickness = 40; // 벽 두께
-
+      const thickness = 40;
       const leftWall = Bodies.rectangle(
-        -thickness / 2, // x 위치: 왼쪽 바깥
-        window.innerHeight / 2, // y 위치: 화면 중앙
-        thickness, // 폭
-        window.innerHeight, // 높이
-        { isStatic: true, render: { fillStyle: "gray" } } // Add this line
-      );
-
-      const rightWall = Bodies.rectangle(
-        window.innerWidth + thickness / 2, // x 위치: 오른쪽 바깥
+        -thickness / 2,
         window.innerHeight / 2,
         thickness,
         window.innerHeight,
-        { isStatic: true, render: { fillStyle: "gray" } } // Add this line
+        { isStatic: true, render: { fillStyle: "gray" } }
       );
-
+      const rightWall = Bodies.rectangle(
+        window.innerWidth + thickness / 2,
+        window.innerHeight / 2,
+        thickness,
+        window.innerHeight,
+        { isStatic: true, render: { fillStyle: "gray" } }
+      );
       Composite.add(world, [leftWall, rightWall]);
 
       Events.on(engine, "afterUpdate", () => {
-        // 💡 역순으로 순회하여 배열에서 요소를 안전하게 제거합니다.
         for (let i = matterBodies.length - 1; i >= 0; i--) {
           const { body, domElement } = matterBodies[i];
           const { x, y } = body.position;
           const angle = body.angle;
-
-          // DOM 요소의 left, top을 Matter.js 바디의 중심 위치에 맞춥니다.
-          // CSS에 transform: translate(-50%, -50%)가 있으므로,
-          // domElement의 (x, y)가 곧 바디의 중심이 됩니다.
           domElement.style.left = `${x}px`;
           domElement.style.top = `${y}px`;
-
-          // 'shake-on-drag' 클래스가 없으면 Matter.js의 회전값을 적용합니다.
-          // 이 클래스가 있다면 CSS 애니메이션이 transform의 rotate 부분을 제어합니다.
           if (!domElement.classList.contains("shake-on-drag")) {
             domElement.style.transform = `translate(-50%, -50%) rotate(${angle}rad)`;
           }
-
-          // 💡 스크린 밖으로 벗어난 요소 제거 로직
-          // 바디의 하단 경계가 화면 아래로 완전히 벗어나거나,
-          // 좌우 경계가 화면 밖으로 완전히 벗어났을 때
-          const buffer = 50; // 화면 경계 밖으로 얼마만큼 더 나가야 지울지 여유값 (px)
-
+          const buffer = 50;
           if (
             gravityMode &&
-            (body.bounds.min.y > window.innerHeight + buffer || // 화면 아래로 벗어남
-              body.bounds.max.x < -buffer || // 화면 왼쪽으로 벗어남
+            (body.bounds.min.y > window.innerHeight + buffer ||
+              body.bounds.max.x < -buffer ||
               body.bounds.min.x > window.innerWidth + buffer)
           ) {
-            // 화면 오른쪽으로 벗어남
-
             console.log(
               `'${matterBodies[i].word}' 단어가 화면 밖으로 벗어나 제거됩니다.`
             );
-
-            // Matter.js 월드에서 바디 제거
             Matter.Composite.remove(world, body);
-            // DOM에서 요소 제거
             domElement.remove();
-
-            // matterBodies 배열에서 해당 요소 제거
             matterBodies.splice(i, 1);
-
-            // 💡 중요: 드래그된 단어 수(draggedWordCount)는 이 로직에서 줄이지 않습니다.
-            // 이 로직은 화면 밖으로 나간 것을 지우는 것이고,
-            // draggedWordCount는 "한 번 이상 드래그되었는지" 여부를 추적하기 위함입니다.
-            // 따라서, matterBodies.length가 변경되므로,
-            // 모든 단어가 드래그되었는지 확인하는 조건 (draggedWordCount === matterBodies.length)은
-            // 이제 '모든 살아남은 단어'가 드래그되었는지로 해석될 수 있습니다.
-            // 만약 '원래 생성된 모든 단어'가 드래그되어야 한다면, totalInitialWords 같은 변수가 필요할 수 있습니다.
-            // 현재 로직에서는 '현재 남아있는 단어들' 중에서 드래그된 수를 셉니다.
           }
         }
       });
 
       document.getElementById("circle").addEventListener("click", () => {
-        // ✅ 음성인식 정지
         recognition.stop();
-
         gravityMode = true;
         document.querySelector(".score").style.display = "none";
         document.querySelector(".progress-container").style.display = "none";
@@ -637,38 +670,29 @@
         wordElements.forEach(({ element, word }) => {
           const rect = element.getBoundingClientRect();
           element.remove();
-
           const width = rect.width;
           const height = rect.height;
           const x = rect.left + width / 2;
           const y = rect.top + height / 2;
-
           const body = Bodies.rectangle(x, y, width, height, {
             restitution: 0.9,
             friction: 0.1,
-            frictionAir: 0.01, // 공기 마찰 (회전 감속)
-            angularDamping: 0.3, // 회전 감쇠
+            frictionAir: 0.01,
+            angularDamping: 0.3,
             density: word.length * 0.001 + 0.001,
-            render: { visible: true, fillStyle: "black" }, // false로 하면 박스 사라맂ㅁ
+            render: { visible: true, fillStyle: "black" },
           });
-
-          //생겨나는 텍스트 css 정리하기
           const domBox = document.createElement("div");
           domBox.className = "word";
           domBox.style.width = `${width}px`;
           domBox.style.height = `${height}px`;
           domBox.style.lineHeight = `${height}px`;
           domBox.textContent = word;
-
-          // domBox.style.backgroundColor = "black"; // DOM 요소 배경색 검정색으로
-          domBox.style.color = "transparent"; // 텍스트 색상을 흰색으로 변경
-          domBox.style.textShadow = "none"; // **이 줄을 추가하여 text-shadow 제거**
-
+          domBox.style.color = "transparent";
+          domBox.style.textShadow = "none";
           document.body.appendChild(domBox);
           body.domElement = domBox;
-
           Composite.add(world, body);
-
           matterBodies.push({
             body,
             domElement: domBox,
@@ -678,42 +702,31 @@
         });
 
         document.getElementById("circle").remove();
-        document.getElementById("instructionDiv").style.display = "block"; // 💡 instructionDiv 표시
+        document.getElementById("instructionDiv").style.display = "block";
 
-        // 💡 5초 후에 단어들을 드래그 가능하게 만드는 로직
         setTimeout(() => {
           document.getElementById("instructionDiv").textContent =
-            "떨어진 글자들을 주워 좌측 상단부터 차례로 배열하세요."; // 지시문 변경
-          // document.getElementById("instructionDiv").remove(); // 또는 지시문 div를 제거하고 싶다면 이 줄을 활성화
+            textData[currentLang].instructionArrange;
           document.querySelector(".next").style.display = "block";
           matterBodies.forEach(({ body, domElement }) => {
-            domElement.classList.add("draggable"); // CSS 클래스 추가 (커서 변경 위함)
-            domElement.style.pointerEvents = "auto"; // 마우스 이벤트 활성화
-
-            // 💡 mousedown 이벤트 리스너 내부
+            domElement.classList.add("draggable");
+            domElement.style.pointerEvents = "auto";
             domElement.addEventListener("mousedown", (e) => {
               isDraggingWord = true;
               currentDraggedBody = body;
               currentDraggedElement = domElement;
-
               const rect = currentDraggedElement.getBoundingClientRect();
               offsetX = e.clientX - rect.left;
               offsetY = e.clientY - rect.top;
-
               Matter.Body.setStatic(currentDraggedBody, true);
-
               currentDraggedElement.style.cursor = "grabbing";
-              // 💡 추가: 드래그 시작 시 기존 transform을 초기화하여 애니메이션이 깔끔하게 적용되도록 합니다.
-              // 이렇게 하면 애니메이션이 0% 상태부터 시작합니다.
-              currentDraggedElement.style.transform = ``; // 기존 transform을 완전히 초기화
-
+              currentDraggedElement.style.transform = ``;
               currentDraggedElement.classList.add("shake-on-drag");
             });
           });
-        }, 3000); // 3초 지연
+        }, 3000);
       });
 
-      // 모바일 환경 감지 및 경고 표시
       const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
       if (isMobile) {
         document.getElementById("mobileWarning").style.display = "flex";
@@ -732,24 +745,20 @@
         });
 
         document.querySelector(".next").classList.add("animate-blink");
-
         isErasingMode = true;
         recognition.start();
 
-        // 💡 지시문 텍스트 설정 및 표시
         const instructionDiv = document.getElementById("instructionDiv");
-        instructionDiv.textContent = "순서대로 단어를 말하여 지우세요.";
-        instructionDiv.style.display = "block"; // 다시 표시
-        instructionDiv.style.opacity = "1"; // 투명도를 100%로 설정 (사라진 후 다시 나타날 때 대비)
+        instructionDiv.textContent = textData[currentLang].instructionErase;
+        instructionDiv.style.display = "block";
+        instructionDiv.style.opacity = "1";
 
-        // 💡 10초 후에 지시문 천천히 사라지게 하기
         setTimeout(() => {
-          instructionDiv.style.opacity = "0"; // 투명도를 0으로 만들어 사라지기 시작
-          // opacity 트랜지션이 끝난 후 완전히 숨김 (약 2초 + 여유 시간)
+          instructionDiv.style.opacity = "0";
           setTimeout(() => {
             instructionDiv.style.display = "none";
-          }, 2000); // CSS transition 시간(2초)보다 약간 길게 설정
-        }, 10000); // 10초 후에 opacity 변경 시작
+          }, 2000);
+        }, 10000);
 
         currentWordAttemptCount = 0;
 
@@ -759,15 +768,12 @@
         }
       }
 
-      // 💡 박수 인식 시작 함수
       async function startClapDetector() {
-        // 모바일 환경 경고 표시 중이면 박수 감지기 시작 안 함
         const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
         if (isMobile) {
           console.log("모바일 환경이므로 박수 감지기를 시작하지 않습니다.");
-          return; // 모바일이면 함수 실행 중단
+          return;
         }
-
         try {
           const stream = await navigator.mediaDevices.getUserMedia({
             audio: true,
@@ -777,28 +783,20 @@
           const mic = audioCtx.createMediaStreamSource(stream);
           const analyser = audioCtx.createAnalyser();
           const dataArray = new Uint8Array(analyser.fftSize);
-
           mic.connect(analyser);
-
-          // 볼륨 임계값 (조절 가능): 박수를 감지하는 민감도
           const CLAP_THRESHOLD = 60;
 
           function detectClap() {
             analyser.getByteTimeDomainData(dataArray);
-
             let maxVolume = 0;
             for (let i = 0; i < dataArray.length; i++) {
               const v = Math.abs(dataArray[i] - 128);
               if (v > maxVolume) maxVolume = v;
             }
-
-            // console.log("Current max volume:", maxVolume); // 디버깅용: 현재 볼륨 확인
-
             if (maxVolume > CLAP_THRESHOLD) {
               console.log("박수 감지! 👏");
               createClapEmoji();
             }
-
             requestAnimationFrame(detectClap);
           }
 
@@ -806,42 +804,28 @@
             const emoji = document.createElement("div");
             emoji.className = "emoji";
             emoji.textContent = "👏";
-
             const x = Math.random() * (window.innerWidth - 50);
             const y = Math.random() * (window.innerHeight - 50);
-
             emoji.style.left = `${x}px`;
             emoji.style.top = `${y}px`;
-
             document.body.appendChild(emoji);
-
             setTimeout(() => {
               emoji.remove();
-            }, 1000); // 애니메이션 후 제거
+            }, 1000);
           }
-
           detectClap();
           console.log("박수 감지기 시작됨.");
         } catch (err) {
           console.error("오디오 스트림에 접근할 수 없습니다:", err);
-          alert(
-            "마이크 접근 권한이 필요합니다. 페이지를 새로고침하여 권한을 허용해주세요."
-          );
+          alert(textData[currentLang].micPermission);
         }
       }
 
-      // 💡 새로 추가할 함수: 현재 단어를 제거하고 다음 단어로 진행
-      // 💡 새로 추가할 함수: 현재 단어를 제거하고 다음 단어로 진행
       function removeCurrentWordAndAdvance() {
-        // 'indexToErase' 파라미터는 사용되지 않으므로 제거해도 좋습니다.
         const targetWordItem = matterBodies[currentWordIndexToErase];
-
-        // Matter.js 바디 제거
         Matter.Composite.remove(world, targetWordItem.body);
-        // DOM 요소 제거
         targetWordItem.domElement.remove();
 
-        // 이전 단어 강조 해제 (만약 이전 단어가 존재한다면)
         if (
           currentWordIndexToErase > 0 &&
           matterBodies[currentWordIndexToErase - 1]
@@ -854,15 +838,12 @@
           ].domElement.style.fontWeight = "normal";
         }
 
-        // 다음 단어로 인덱스 이동
-        currentWordIndexToErase++; // 오타 수정된 부분
+        currentWordIndexToErase++;
 
-        // 💡 첫 번째 단어가 지워지면 지시문 숨기기
         if (currentWordIndexToErase === 1) {
           document.getElementById("instructionDiv").style.display = "none";
         }
 
-        // 다음 단어 강조 또는 모든 단어 지움 처리
         if (currentWordIndexToErase < matterBodies.length) {
           matterBodies[
             currentWordIndexToErase
@@ -870,20 +851,67 @@
           matterBodies[currentWordIndexToErase].domElement.style.fontWeight =
             "bold";
         } else {
-          // 모든 단어를 지웠을 때
           const instructionDiv = document.getElementById("instructionDiv");
-          // textContent 대신 innerHTML을 사용하여 HTML 태그를 삽입합니다.
-          instructionDiv.innerHTML = `👏👏👏<br><br><a href="./index.html" style="font-size: 1.2rem; color: black;">다시하기</a>`;
-
-          instructionDiv.style.display = "block"; // 최종 메시지는 다시 표시
-          instructionDiv.style.opacity = "1"; // 완전히 보이게
+          instructionDiv.innerHTML = `${textData[currentLang].finalMessage}<br><br><a href="./index.html" style="font-size: 1.2rem; color: black;">${textData[currentLang].retry}</a>`;
+          instructionDiv.style.display = "block";
+          instructionDiv.style.opacity = "1";
           recognition.stop();
           document.querySelector(".next").classList.remove("animate-blink");
           document.querySelector(".next").style.display = "none";
-
           startClapDetector();
         }
       }
+
+      function updateTextOnScreen() {
+        const lang = textData[currentLang];
+
+        document.title = lang.title;
+        document.querySelector('.title a[href="./index.html"]').textContent =
+          lang.title;
+        document.querySelector('.title a[href*="instagram"]').textContent =
+          lang.author;
+
+        document.querySelector(".score").childNodes[0].nodeValue =
+          lang.scoreInstruction;
+        document.querySelector(".consonantButton").textContent =
+          lang.nextConsonant;
+        document.getElementById("mobileWarning").innerHTML = lang.mobileWarning;
+
+        document.getElementById("instructionDiv").textContent =
+          lang.instructionArrange;
+
+        const consonantElement = document.querySelector(".consonant");
+        if (consonantIndex === -1) {
+          consonantElement.textContent =
+            currentLang === "en" ? consonants_en[0] : consonants_ko[0];
+        } else {
+          const currentSet =
+            currentLang === "en" ? consonants_en : consonants_ko;
+          if (consonantIndex < currentSet.length) {
+            consonantElement.textContent = currentSet[consonantIndex];
+          }
+        }
+      }
+
+      document.getElementById("btn-ko").addEventListener("click", () => {
+        // ✨ 3. 언어가 잠겨있지 않을 때만 변경하도록 수정
+        if (!isLanguageLocked) {
+          currentLang = "ko";
+          recognition.lang = "ko-KR";
+          updateTextOnScreen();
+        }
+      });
+
+      document.getElementById("btn-en").addEventListener("click", () => {
+        // ✨ 3. 언어가 잠겨있지 않을 때만 변경하도록 수정
+        if (!isLanguageLocked) {
+          currentLang = "en";
+          recognition.lang = "en-US";
+          updateTextOnScreen();
+        }
+      });
+
+      updateTextOnScreen();
     </script>
   </body>
 </html>
